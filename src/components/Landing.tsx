@@ -1,12 +1,45 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../store";
+import { useSession } from "../auth/SessionProvider";
 import { css } from "../css";
+import { ROUTES } from "../routes";
 import { LogoMark } from "./Logo";
 
 const DEMO_ROUTES = ["add-role", "tailor", "company-prep", "debrief"];
+const DEMO_INTERVAL = 3400;
 
 export function Landing() {
-  const { state, setDemo, enterApp, startOnboarding, openContact } = useApp();
-  const demo = state.demo;
+  const { openContact } = useApp();
+  const { session } = useSession();
+  const navigate = useNavigate();
+
+  // The hero walkthrough rotates only while someone is on this page.
+  const [demo, setDemoState] = useState(0);
+  const timer = useRef<number | null>(null);
+
+  const startRotation = useCallback(() => {
+    if (timer.current !== null) window.clearInterval(timer.current);
+    timer.current = window.setInterval(
+      () => setDemoState((d) => (d + 1) % DEMO_ROUTES.length),
+      DEMO_INTERVAL,
+    );
+  }, []);
+
+  useEffect(() => {
+    startRotation();
+    return () => {
+      if (timer.current !== null) window.clearInterval(timer.current);
+    };
+  }, [startRotation]);
+
+  const setDemo = (i: number) => {
+    setDemoState(i);
+    startRotation();
+  };
+
+  const signIn = () => navigate(ROUTES.login);
+  const getStarted = () => navigate(session ? ROUTES.onboarding : ROUTES.login);
 
   const dBg = (i: number) => (demo === i ? "oklch(0.55 0.15 255 / 0.08)" : "#fff");
   const dBorder = (i: number) =>
@@ -57,8 +90,8 @@ export function Landing() {
           </div>
           <div style={css("margin-left:auto; display:flex; align-items:center; gap:14px;")}>
             <button onClick={openContact} style={css("font-family:'IBM Plex Sans'; font-size:14px; font-weight:500; background:none; border:none; color:oklch(0.4 0.015 260); cursor:pointer;")}>Contact</button>
-            <button onClick={enterApp} style={css("font-family:'IBM Plex Sans'; font-size:14px; font-weight:500; background:none; border:none; color:oklch(0.35 0.02 260); cursor:pointer;")}>Sign in</button>
-            <button onClick={startOnboarding} style={css("font-family:'IBM Plex Sans'; font-size:14px; font-weight:600; color:#fff; background:oklch(0.55 0.15 255); border:none; padding:10px 16px; border-radius:9px; cursor:pointer;")}>Get started</button>
+            <button onClick={signIn} style={css("font-family:'IBM Plex Sans'; font-size:14px; font-weight:500; background:none; border:none; color:oklch(0.35 0.02 260); cursor:pointer;")}>Sign in</button>
+            <button onClick={getStarted} style={css("font-family:'IBM Plex Sans'; font-size:14px; font-weight:600; color:#fff; background:oklch(0.55 0.15 255); border:none; padding:10px 16px; border-radius:9px; cursor:pointer;")}>Get started</button>
           </div>
         </div>
       </div>
@@ -72,8 +105,8 @@ export function Landing() {
           <h1 style={css("font-family:'Space Grotesk',sans-serif; font-size:52px; line-height:1.04; font-weight:600; letter-spacing:-0.025em; margin:0 0 20px;")}>Apply to jobs, better. Smarter.</h1>
           <p style={css("font-size:18px; line-height:1.6; color:oklch(0.4 0.015 260); margin:0 0 30px; max-width:490px; text-wrap:pretty;")}>PrepFor.Me tailors your resume truthfully to each role and builds deep, company-specific interview prep that compounds every time you use it. Not a spray-and-pray machine — a war room for high-intent applications.</p>
           <div style={css("display:flex; gap:14px; align-items:center;")}>
-            <button onClick={startOnboarding} style={css("font-family:'IBM Plex Sans'; font-size:15px; font-weight:600; color:#fff; background:oklch(0.55 0.15 255); border:none; padding:14px 24px; border-radius:11px; cursor:pointer; box-shadow:0 10px 24px -12px oklch(0.55 0.15 255 / 0.8);")}>Start with your resume</button>
-            <button onClick={enterApp} style={css("font-family:'IBM Plex Sans'; font-size:15px; font-weight:600; color:oklch(0.3 0.02 260); background:#fff; border:1px solid oklch(0.88 0.006 260); padding:14px 22px; border-radius:11px; cursor:pointer;")}>See the live demo →</button>
+            <button onClick={getStarted} style={css("font-family:'IBM Plex Sans'; font-size:15px; font-weight:600; color:#fff; background:oklch(0.55 0.15 255); border:none; padding:14px 24px; border-radius:11px; cursor:pointer; box-shadow:0 10px 24px -12px oklch(0.55 0.15 255 / 0.8);")}>Start with your resume</button>
+            <button onClick={signIn} style={css("font-family:'IBM Plex Sans'; font-size:15px; font-weight:600; color:oklch(0.3 0.02 260); background:#fff; border:1px solid oklch(0.88 0.006 260); padding:14px 22px; border-radius:11px; cursor:pointer;")}>Sign in →</button>
           </div>
           <div style={css("display:flex; gap:26px; margin-top:34px;")}>
             <div><div style={css("font-family:'Space Grotesk'; font-size:24px; font-weight:600;")}>2.4×</div><div style={css("font-size:12.5px; color:oklch(0.5 0.015 260);")}>higher response rate</div></div>
@@ -290,7 +323,7 @@ export function Landing() {
             <div style={css("display:flex; flex-direction:column; gap:10px; font-size:13.5px; color:oklch(0.35 0.015 260); flex:1;")}>
               <div>✓ Structured profile</div><div>✓ Up to 5 tracked applications</div><div>✓ Resume tailoring + ATS gap</div><div>✓ 1 company prep workspace</div>
             </div>
-            <button onClick={startOnboarding} style={css("margin-top:22px; font-family:'IBM Plex Sans'; font-size:14px; font-weight:600; color:oklch(0.3 0.02 260); background:#fff; border:1px solid oklch(0.85 0.006 260); padding:12px; border-radius:10px; cursor:pointer;")}>Get started</button>
+            <button onClick={getStarted} style={css("margin-top:22px; font-family:'IBM Plex Sans'; font-size:14px; font-weight:600; color:oklch(0.3 0.02 260); background:#fff; border:1px solid oklch(0.85 0.006 260); padding:12px; border-radius:10px; cursor:pointer;")}>Get started</button>
           </div>
           <div style={css("background:#fff; border:2px solid oklch(0.55 0.15 255); border-radius:16px; padding:28px; display:flex; flex-direction:column; position:relative; box-shadow:0 24px 50px -30px oklch(0.55 0.15 255 / 0.7);")}>
             <div style={css("position:absolute; top:-12px; left:28px; background:oklch(0.55 0.15 255); color:#fff; font-family:'IBM Plex Mono'; font-size:11px; padding:4px 11px; border-radius:100px;")}>MOST POPULAR</div>
@@ -300,7 +333,7 @@ export function Landing() {
             <div style={css("display:flex; flex-direction:column; gap:10px; font-size:13.5px; color:oklch(0.35 0.015 260); flex:1;")}>
               <div>✓ Unlimited applications</div><div>✓ Unlimited company prep workspaces</div><div>✓ Browser extension autofill</div><div>✓ Funnel &amp; conversion analytics</div><div>✓ Recap-fed prep, compounding</div>
             </div>
-            <button onClick={startOnboarding} style={css("margin-top:22px; font-family:'IBM Plex Sans'; font-size:14px; font-weight:600; color:#fff; background:oklch(0.55 0.15 255); border:none; padding:12px; border-radius:10px; cursor:pointer;")}>Start Pro</button>
+            <button onClick={getStarted} style={css("margin-top:22px; font-family:'IBM Plex Sans'; font-size:14px; font-weight:600; color:#fff; background:oklch(0.55 0.15 255); border:none; padding:12px; border-radius:10px; cursor:pointer;")}>Start Pro</button>
           </div>
           <div style={css("background:oklch(0.98 0.003 260); border:1px solid oklch(0.9 0.006 260); border-radius:16px; padding:28px; display:flex; flex-direction:column;")}>
             <div style={css("display:flex; align-items:center; gap:8px;")}><span style={css("font-family:'Space Grotesk'; font-size:18px; font-weight:600;")}>Premium</span><span style={css("font-family:'IBM Plex Mono'; font-size:10px; background:oklch(0.9 0.008 260); color:oklch(0.45 0.015 260); padding:3px 8px; border-radius:100px;")}>SOON</span></div>
@@ -333,7 +366,7 @@ export function Landing() {
         <div style={css("max-width:1200px; margin:0 auto; padding:72px 32px; text-align:center;")}>
           <h2 style={css("font-family:'Space Grotesk'; font-size:40px; font-weight:600; letter-spacing:-0.02em; margin:0 0 14px;")}>Walk into every interview knowing the company cold.</h2>
           <p style={css("font-size:17px; opacity:0.85; margin:0 0 28px;")}>Upload your resume. Your first tailored application takes about five minutes.</p>
-          <button onClick={startOnboarding} style={css("font-family:'IBM Plex Sans'; font-size:16px; font-weight:600; color:oklch(0.4 0.13 255); background:#fff; border:none; padding:15px 30px; border-radius:12px; cursor:pointer;")}>Get started free</button>
+          <button onClick={getStarted} style={css("font-family:'IBM Plex Sans'; font-size:16px; font-weight:600; color:oklch(0.4 0.13 255); background:#fff; border:none; padding:15px 30px; border-radius:12px; cursor:pointer;")}>Get started free</button>
         </div>
       </div>
 

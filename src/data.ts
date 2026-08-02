@@ -1,6 +1,6 @@
-import type { Application, Stage, TourStep } from "./types";
+import type { Stage, TourStep } from "./types";
 
-/** Pipeline stages, in order — ported from the design. */
+/** The pipeline, in order. Rejected and Withdrawn sit outside it. */
 export const STAGES: Stage[] = [
   "Saved",
   "Applied",
@@ -10,41 +10,47 @@ export const STAGES: Stage[] = [
   "Offer",
 ];
 
-/** Seed applications — ported verbatim from the design's initial state. */
-export const INITIAL_APPS: Application[] = [
-  { id: "stripe", company: "Stripe", role: "Staff Software Engineer", level: "Staff · L6", stage: "Onsite", next: "Log your recap", updated: "1d ago", resume: true, prep: true, sources: 7, debriefs: 3, h: 255 },
-  { id: "ramp", company: "Ramp", role: "Senior Software Engineer", level: "Senior · L5", stage: "Technical", next: "Prep screen · Fri", updated: "2h ago", resume: true, prep: true, sources: 5, debriefs: 1, h: 150 },
-  { id: "mpage", company: "Michael Page", role: "Bilingual Consulting Recruiter", level: "Mid-level", stage: "Screen", next: "Confirm call · Wed", updated: "4h ago", resume: true, prep: true, sources: 4, debriefs: 1, h: 30 },
-  { id: "notion", company: "Notion", role: "Senior Software Engineer", level: "Senior", stage: "Screen", next: "Confirm call · Thu", updated: "5h ago", resume: true, prep: true, sources: 4, debriefs: 0, h: 0 },
-  { id: "figma", company: "Figma", role: "Staff Engineer, Platform", level: "Staff", stage: "Applied", next: "Tailor resume", updated: "3d ago", resume: false, prep: false, sources: 2, debriefs: 0, h: 300 },
-  { id: "linear", company: "Linear", role: "Product Engineer", level: "Mid · L4", stage: "Applied", next: "Awaiting response", updated: "1w ago", resume: true, prep: false, sources: 1, debriefs: 0, h: 265 },
-  { id: "vercel", company: "Vercel", role: "Senior Product Engineer", level: "Senior", stage: "Saved", next: "Tailor & apply", updated: "just now", resume: false, prep: false, sources: 0, debriefs: 0, h: 145 },
-  { id: "datadog", company: "Datadog", role: "Senior SWE, Metrics", level: "Senior", stage: "Offer", next: "Review offer · Tue", updated: "2d ago", resume: true, prep: true, sources: 6, debriefs: 2, h: 285 },
-  { id: "airbnb", company: "Airbnb", role: "Senior Software Engineer", level: "Senior", stage: "Rejected", next: "What did you learn?", updated: "1w ago", resume: true, prep: true, sources: 3, debriefs: 1, h: 10 },
-];
+/** Every stage a role can be set to, including the terminal ones. */
+export const ALL_STAGES: Stage[] = [...STAGES, "Rejected", "Withdrawn"];
 
-/** Product tour — ported verbatim from the design. */
+/** Stages that mean the company came back to you. */
+export const RESPONDED_STAGES: Stage[] = ["Screen", "Technical", "Onsite", "Offer"];
+
+/** Stages that mean you actually interviewed. */
+export const INTERVIEW_STAGES: Stage[] = ["Technical", "Onsite"];
+
+/** Stages that represent a conversation that happened, and so a recap to log. */
+export const ROUND_STAGES: Stage[] = ["Screen", "Technical", "Onsite"];
+
+/** Stages that keep a role in your active pipeline. */
+export const CLOSED_STAGES: Stage[] = ["Rejected", "Withdrawn"];
+
+/** Product tour. ":id" resolves to the user's deepest prep space at runtime. */
 export const TOUR_STEPS: TourStep[] = [
-  { view: "home", sel: "add-role", title: "Add a role", hint: 'Click "+ Add a role"', body: "Everything starts here. Paste a job description or a link to track a new application — Job Copilot builds the workspace around it." },
-  { view: "home", sel: "readiness", title: "Your readiness at a glance", body: "Response rate, interviews this week, prep strength. Application volume is never the headline — depth is." },
-  { view: "home", sel: "needs", title: "What needs you next", body: "Recaps to log, interviews to prep, resumes to tailor. Click any item to jump straight into the work." },
-  { view: "home", sel: "dossier", title: "Your deepest company file", hint: "Click to open the dossier", body: "This grows with every source and recap you add. The more you use it, the sharper your prep gets." },
-  { view: "home", sel: "nav-applications", title: "Open the tracker", hint: 'Click "Applications"', body: "See your whole pipeline on a board or a table, and move roles through their stages." },
-  { view: "applications", sel: "tracker", title: "Every role is a card", hint: "Click any card to open it", body: "Cards move through Saved → Applied → Screen → Technical → Onsite → Offer. Drag, filter, or switch to a dense table." },
-  { view: "appDetail", appId: "stripe", tab: "materials", sel: "detail-tabs", title: "Each application is the heart", body: "One role holds its tailored resume, referral drafts, company prep, and interview recaps — all together, right here." },
-  { view: "appDetail", appId: "stripe", tab: "materials", sel: "advance", title: "Move it forward", hint: 'Click "Advance"', body: 'Advance the stage as you progress. Rejected? It prompts a quick "what did you learn" so it still feeds your prep.' },
-  { view: "appDetail", appId: "stripe", tab: "referrals", sel: "tab-referrals", title: "Get a warm intro first", body: "Referrals drafts a personalized note per person and opens LinkedIn. You review and send — we never send for you." },
-  { view: "appDetail", appId: "stripe", tab: "prep", sel: "tab-prep", title: "Know the company cold", body: "Company prep is a chat grounded in real sources and your debriefs. Every answer shows where it came from." },
-  { view: "appDetail", appId: "stripe", tab: "debriefs", sel: "tab-debriefs", title: "Log every interview", hint: 'Open "Recaps"', body: "After a real interview, capture what was asked. It’s the highest-value data here — each recap deepens this company’s prep." },
-  { view: "profile", sel: "profile-review", title: "Your profile is the spine", body: "Everything is generated from here. A standing review flags gaps, and every bullet is an editable, reorderable object." },
-  { view: "discover", sel: "discover-search", title: "Discover roles", hint: "Describe what you want", body: "Describe the role in plain words. We query public job feeds and rank matches against your profile — then add the good ones to your tracker." },
-  { view: "practice", sel: "practice", title: "Practice is coming", body: "The flagship premium engine: grounded mock interviews and rubric-scored feedback. Locked for now — join the waitlist." },
-  { view: "settings", sel: "privacy", title: "You own your data", body: "Export everything in one click, and clear any company’s corpus. We hold sensitive history so the app can work for you — and the controls are front and center." },
-  { view: "home", sel: "sidebar-help", title: "Always within reach", body: "Reopen this tour, contact our support team, or manage the browser extension — right here, on every screen." },
-  { view: "home", sel: null, title: "You're set", body: "That’s the loop: prepare deeply, apply with intent, log what happens, get sharper. Reopen this tour anytime from the sidebar." },
+  { path: "/app", sel: "add-role", title: "Add a role", hint: 'Click "+ Add a role"', body: "Everything starts here. Paste a job description or a link to track a new application — PrepFor.Me builds the workspace around it." },
+  { path: "/app", sel: "readiness", title: "Your readiness at a glance", body: "Response rate, interviews this week, prep strength. Application volume is never the headline — depth is." },
+  { path: "/app", sel: "needs", title: "What needs you next", body: "Recaps to log, interviews to prep, resumes to tailor. Click any item to jump straight into the work." },
+  { path: "/app", sel: "dossier", title: "Your deepest company file", hint: "Click to open the dossier", body: "This grows with every source and recap you add. The more you use it, the sharper your prep gets.", requiresApplication: true },
+  { path: "/app", sel: "nav-applications", title: "Open the tracker", hint: 'Click "Applications"', body: "See your whole pipeline on a board or a table, and move roles through their stages." },
+  { path: "/app/applications", sel: "tracker", title: "Every role is a card", hint: "Click any card to open it", body: "Cards move through Saved → Applied → Screen → Technical → Onsite → Offer. Filter, or switch to a dense table." },
+  { path: "/app/applications/:id", tab: "materials", sel: "detail-tabs", title: "Each application is the heart", body: "One role holds its tailored resume, referral drafts, company prep, and interview recaps — all together, right here.", requiresApplication: true },
+  { path: "/app/applications/:id", tab: "materials", sel: "advance", title: "Move it forward", hint: 'Click "Advance"', body: 'Advance the stage as you progress. Rejected? It prompts a quick "what did you learn" so it still feeds your prep.', requiresApplication: true },
+  { path: "/app/applications/:id", tab: "referrals", sel: "tab-referrals", title: "Get a warm intro first", body: "Referrals drafts a personalized note per person and opens LinkedIn. You review and send — we never send for you.", requiresApplication: true },
+  { path: "/app/applications/:id", tab: "prep", sel: "tab-prep", title: "Know the company cold", body: "Company prep is a chat grounded in real sources and your debriefs. Every answer shows where it came from.", requiresApplication: true },
+  { path: "/app/applications/:id", tab: "debriefs", sel: "tab-debriefs", title: "Log every interview", hint: 'Open "Recaps"', body: "After a real interview, capture what was asked. It’s the highest-value data here — each recap deepens this company’s prep.", requiresApplication: true },
+  { path: "/app/profile", sel: "profile-review", title: "Your profile is the spine", body: "Everything is generated from here. A standing review flags gaps, and every bullet is an editable, reorderable object." },
+  { path: "/app/discover", sel: "discover-search", title: "Discover roles", hint: "Describe what you want", body: "Describe the role in plain words. We query public job feeds and rank matches against your profile — then add the good ones to your tracker." },
+  { path: "/app/practice", sel: "practice", title: "Practice is coming", body: "The flagship premium engine: grounded mock interviews and rubric-scored feedback. Not built yet — tell us what you'd practice first and it moves up the list." },
+  { path: "/app/settings", sel: "privacy", title: "You own your data", body: "Export everything in one click, and clear any company’s corpus. We hold sensitive history so the app can work for you — and the controls are front and center." },
+  { path: "/app", sel: "sidebar-help", title: "Always within reach", body: "Reopen this tour, contact our support team, or manage the browser extension — right here, on every screen." },
+  { path: "/app", sel: null, title: "You're set", body: "That’s the loop: prepare deeply, apply with intent, log what happens, get sharper. Reopen this tour anytime from the sidebar." },
 ];
 
-/** Per-company avatar palettes — [background, foreground]. Ported verbatim. */
+/**
+ * Avatar palettes — [background, foreground]. Well-known companies keep their
+ * hand-picked colors; anything else gets a stable hue derived from its name, so
+ * a company always looks the same without needing a palette entry.
+ */
 const LOGO_PALETTES: Record<string, [string, string]> = {
   stripe: ["oklch(0.55 0.15 275 / 0.14)", "oklch(0.42 0.14 275)"],
   ramp: ["oklch(0.6 0.15 150 / 0.15)", "oklch(0.42 0.13 150)"],
@@ -54,14 +60,25 @@ const LOGO_PALETTES: Record<string, [string, string]> = {
   vercel: ["oklch(0.3 0.01 260 / 0.1)", "oklch(0.25 0.01 260)"],
   datadog: ["oklch(0.55 0.16 300 / 0.14)", "oklch(0.44 0.15 300)"],
   airbnb: ["oklch(0.62 0.16 15 / 0.14)", "oklch(0.52 0.16 15)"],
-  mpage: ["oklch(0.6 0.16 30 / 0.14)", "oklch(0.5 0.15 30)"],
+  "michael page": ["oklch(0.6 0.16 30 / 0.14)", "oklch(0.5 0.15 30)"],
 };
 
-export function logo(app: Pick<Application, "id">): [string, string] {
-  return LOGO_PALETTES[app.id] || ["oklch(0.55 0.15 255 / 0.14)", "oklch(0.4 0.13 255)"];
+function hue(company: string): number {
+  let h = 0;
+  for (let i = 0; i < company.length; i++) {
+    h = (h * 31 + company.charCodeAt(i)) % 360;
+  }
+  return h;
 }
 
-/** Stage pill styling — [foreground color, background color]. Ported verbatim. */
+export function logoPalette(company: string): [string, string] {
+  const named = LOGO_PALETTES[company.trim().toLowerCase()];
+  if (named) return named;
+  const h = hue(company.trim().toLowerCase());
+  return [`oklch(0.55 0.15 ${h} / 0.14)`, `oklch(0.42 0.13 ${h})`];
+}
+
+/** Stage pill styling — [foreground color, background color]. */
 const STAGE_STYLES: Record<string, [string, string]> = {
   Saved: ["oklch(0.5 0.01 260)", "oklch(0.94 0.004 260)"],
   Applied: ["oklch(0.42 0.1 255)", "oklch(0.55 0.15 255 / 0.1)"],
@@ -77,7 +94,7 @@ export function stageStyle(stage: string): [string, string] {
   return STAGE_STYLES[stage] || STAGE_STYLES.Saved;
 }
 
-/** Kanban column header colors — ported verbatim. */
+/** Kanban column header colors. */
 export const COL_COLORS: Record<string, string> = {
   Saved: "oklch(0.5 0.01 260)",
   Applied: "oklch(0.42 0.1 255)",
@@ -89,3 +106,6 @@ export const COL_COLORS: Record<string, string> = {
 
 /** The signature accent color, used everywhere. */
 export const ACCENT = "oklch(0.55 0.15 255)";
+
+/** Neutral used for "not yet" dots and empty progress segments. */
+export const MUTED_DOT = "oklch(0.88 0.006 260)";

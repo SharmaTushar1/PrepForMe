@@ -1,4 +1,4 @@
-/** The PrepFor.Me / Job Copilot mark — a target/aperture glyph. */
+/** The PrepFor.Me mark — a target/aperture glyph. */
 export function LogoMark({ size = 24 }: { size?: number }) {
   return (
     <svg

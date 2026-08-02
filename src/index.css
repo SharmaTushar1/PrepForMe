@@ -35,6 +35,79 @@ a:hover {
   background-clip: padding-box;
 }
 
+/* Form controls. Focus and placeholder states can't be expressed as inline
+   styles, so the shared field look lives here and is applied via class. */
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+  color: inherit;
+}
+.field {
+  width: 100%;
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 13.5px;
+  color: #10151c;
+  background: #fff;
+  border: 1px solid oklch(0.9 0.006 260);
+  border-radius: 10px;
+  padding: 11px 13px;
+  line-height: 1.55;
+  outline: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.field::placeholder {
+  color: oklch(0.62 0.015 260);
+}
+.field:focus {
+  border-color: oklch(0.6 0.13 255);
+  box-shadow: 0 0 0 3px oklch(0.55 0.15 255 / 0.14);
+}
+.field:disabled {
+  background: oklch(0.97 0.003 260);
+  color: oklch(0.6 0.015 260);
+  cursor: not-allowed;
+}
+.field-invalid,
+.field-invalid:focus {
+  border-color: oklch(0.6 0.16 25 / 0.55);
+  box-shadow: 0 0 0 3px oklch(0.6 0.16 25 / 0.12);
+}
+textarea.field {
+  resize: vertical;
+}
+.field-bare {
+  font-family: "IBM Plex Sans", sans-serif;
+  background: none;
+  border: none;
+  outline: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  width: 100%;
+}
+.field-bare:focus {
+  box-shadow: 0 -1px 0 0 oklch(0.55 0.15 255 / 0.5) inset;
+}
+.pressable {
+  transition:
+    filter 0.15s,
+    opacity 0.15s;
+}
+.pressable:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+.pressable:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.row-link:hover {
+  background: oklch(0.985 0.003 260);
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;

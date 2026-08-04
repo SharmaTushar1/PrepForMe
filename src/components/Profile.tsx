@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { css } from "../css";
-import { dateRange } from "../lib/format";
-import type { Experience, ExperienceBullet } from "../types";
+import { dateRange, fileSize, shortDate } from "../lib/format";
+import { ROUTES } from "../routes";
+import type { Experience, ExperienceBullet, Resume } from "../types";
+import { isAnalysisStale, useBaseResume, useResumeReport } from "../data/resumes";
+import { scoreColor } from "./resume/AtsReportView";
+import { ResumeUploadCard } from "./resume/ResumeUploadCard";
 import {
   profileGaps,
   useAddSkill,
@@ -20,10 +25,12 @@ import {
 } from "../data/profile";
 import {
   EmptyState,
+  ErrorNote,
   Eyebrow,
   FieldLabel,
   Loading,
   PrimaryButton,
+  SecondaryButton,
   TextInput,
   Toggle,
 } from "./ui";
@@ -127,6 +134,12 @@ export function Profile() {
             onSave={(headline) => updateProfile.mutate({ headline })}
           />
         </div>
+      </div>
+
+      {/* base resume */}
+      <Eyebrow style={{ marginBottom: "12px" }}>Base resume</Eyebrow>
+      <div style={css("margin-bottom:22px;")}>
+        <BaseResumeCard />
       </div>
 
       {/* experience */}
@@ -263,6 +276,96 @@ export function Profile() {
       </div>
     </div>
   );
+}
+
+/**
+ * The file the rest of the product is measured against. Shows what's stored
+ * and what was made of it — never a score it doesn't have, since the analysis
+ * can be refused or still running long after the upload finished.
+ */
+function BaseResumeCard() {
+  const navigate = useNavigate();
+  const base = useBaseResume();
+  const report = useResumeReport(base.resume?.id);
+  const [replacing, setReplacing] = useState(false);
+
+  if (base.isLoading) {
+    return (
+      <div style={css("border:1px solid oklch(0.9 0.006 260); border-radius:13px; padding:20px; background:#fff; font-size:13px; color:oklch(0.55 0.015 260);")}>
+        Loading your resume…
+      </div>
+    );
+  }
+
+  if (base.error) return <ErrorNote error={base.error} />;
+
+  const resume = base.resume;
+
+  if (!resume || replacing) {
+    return (
+      <ResumeUploadCard
+        // The report page owns the analysis, so a stored file hands off to it
+        // rather than growing a second place to press "analyze".
+        onUploaded={() => {
+          setReplacing(false);
+          navigate(ROUTES.resume);
+        }}
+        footer={
+          replacing && resume ? (
+            <div>
+              <SecondaryButton onClick={() => setReplacing(false)}>
+                Keep {resume.fileName}
+              </SecondaryButton>
+            </div>
+          ) : undefined
+        }
+      />
+    );
+  }
+
+  const score = report.data?.report.overallScore ?? null;
+
+  return (
+    <div style={css("border:1px solid oklch(0.9 0.006 260); border-radius:13px; padding:18px 20px; background:#fff; display:flex; align-items:center; gap:14px; flex-wrap:wrap;")}>
+      <div style={css("flex:1; min-width:200px;")}>
+        <div style={css("font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;")}>
+          {resume.fileName}
+        </div>
+        <div style={css("font-family:'IBM Plex Mono'; font-size:11.5px; color:oklch(0.55 0.015 260); margin-top:3px;")}>
+          {fileSize(resume.byteSize)} · uploaded {shortDate(resume.createdAt)}
+        </div>
+      </div>
+
+      {score !== null ? (
+        <span
+          style={{
+            ...css("font-family:'Space Grotesk'; font-size:14px; font-weight:600; padding:6px 12px; border-radius:100px;"),
+            color: scoreColor(score),
+            background: `color-mix(in oklab, ${scoreColor(score)} 12%, #fff)`,
+            border: `1px solid color-mix(in oklab, ${scoreColor(score)} 30%, #fff)`,
+          }}
+        >
+          {score}
+          <span style={css("font-size:11px; font-weight:400; color:oklch(0.55 0.015 260);")}> /100</span>
+        </span>
+      ) : (
+        <span style={css("font-family:'IBM Plex Mono'; font-size:11px; color:oklch(0.5 0.015 260);")}>
+          {statusNote(resume)}
+        </span>
+      )}
+
+      <SecondaryButton onClick={() => navigate(ROUTES.resume)}>View report</SecondaryButton>
+      <SecondaryButton onClick={() => setReplacing(true)}>Replace</SecondaryButton>
+    </div>
+  );
+}
+
+function statusNote(resume: Resume): string {
+  if (resume.status === "analyzing") {
+    return isAnalysisStale(resume) ? "analysis stopped" : "analyzing…";
+  }
+  if (resume.status === "failed") return "analysis failed";
+  return "not analyzed yet";
 }
 
 /** An input that persists when you leave it, so nothing needs a save button. */

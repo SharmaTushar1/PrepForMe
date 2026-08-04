@@ -1,52 +1,48 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../store";
 import { css } from "../css";
 import { LogoMark } from "./Logo";
 import { ACCENT } from "../data";
 import { ROUTES } from "../routes";
-import { ai } from "../lib/ai";
+import type { ResumeAnalysis } from "../lib/ai";
 import { useCreateBullet, useCreateExperience, useUpdateProfile } from "../data/profile";
+import { ParsedResumeReview } from "./resume/ParsedResumeReview";
+import { ResumeUploadCard } from "./resume/ResumeUploadCard";
 import { FieldLabel, PrimaryButton, TextInput } from "./ui";
 
 /**
- * Two real steps: who you are, and one role with its bullets. That's the minimum
- * the spine needs before tailoring has anything true to work with. Resume
- * parsing isn't wired up, and this screen says so rather than faking it.
+ * Three ways through, and all of them have to work: upload a PDF and review
+ * what came out of it, type the one role that matters, or skip and start with
+ * an empty spine. Uploading is first because it's the only one that fills the
+ * profile in a single step — it isn't a requirement.
  */
+const STEP = { upload: 0, identity: 1, role: 2, review: 3 } as const;
+
 export function Onboarding() {
   const { state, setObStep } = useApp();
   const navigate = useNavigate();
   const updateProfile = useUpdateProfile();
   const createExperience = useCreateExperience();
   const createBullet = useCreateBullet();
-  const fileInput = useRef<HTMLInputElement>(null);
 
   const step = state.obStep;
   const dot = (n: number) => (step >= n ? ACCENT : "oklch(0.9 0.006 260)");
 
+  const [analysis, setAnalysis] = useState<ResumeAnalysis | null>(null);
   const [fullName, setFullName] = useState("");
   const [headline, setHeadline] = useState("");
   const [title, setTitle] = useState("");
   const [company, setCompany] = useState("");
   const [bullets, setBullets] = useState<string[]>([""]);
-  const [parseNote, setParseNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  async function tryParse(file: File) {
-    try {
-      await ai.parseResume(file);
-    } catch (e) {
-      setParseNote(e instanceof Error ? e.message : "That file couldn't be read.");
-    }
-  }
 
   async function saveIdentity() {
     if (!fullName.trim()) return;
     setSaving(true);
     try {
       await updateProfile.mutateAsync({ fullName, headline });
-      setObStep(1);
+      setObStep(STEP.role);
     } finally {
       setSaving(false);
     }
@@ -73,7 +69,12 @@ export function Onboarding() {
 
   return (
     <div style={css("min-height:100vh; display:flex; align-items:center; justify-content:center; padding:40px; background:radial-gradient(110% 80% at 50% -10%, oklch(0.55 0.15 255 / 0.08), transparent 55%), oklch(0.985 0.003 260);")}>
-      <div style={css("width:560px; max-width:100%;")}>
+      <div
+        style={{
+          ...css("max-width:100%;"),
+          width: step === STEP.review ? "720px" : "560px",
+        }}
+      >
         <div style={css("display:flex; align-items:center; gap:9px; justify-content:center; margin-bottom:8px;")}>
           <LogoMark size={26} />
           <span style={css("font-family:'Space Grotesk'; font-weight:600; font-size:17px;")}>
@@ -82,12 +83,43 @@ export function Onboarding() {
         </div>
 
         <div style={css("display:flex; gap:6px; justify-content:center; margin:20px 0 26px;")}>
-          <span style={{ width: "44px", height: "4px", borderRadius: "2px", background: dot(0) }}></span>
-          <span style={{ width: "44px", height: "4px", borderRadius: "2px", background: dot(1) }}></span>
+          <span style={{ width: "44px", height: "4px", borderRadius: "2px", background: dot(STEP.upload) }}></span>
+          <span style={{ width: "44px", height: "4px", borderRadius: "2px", background: dot(STEP.identity) }}></span>
+          <span style={{ width: "44px", height: "4px", borderRadius: "2px", background: dot(STEP.role) }}></span>
         </div>
 
         <div style={css("background:#fff; border:1px solid oklch(0.9 0.006 260); border-radius:18px; padding:36px; box-shadow:0 30px 70px -44px oklch(0.3 0.05 260 / 0.6);")}>
-          {step === 0 && (
+          {step === STEP.upload && (
+            <div style={css("animation:fadeUp .4s ease both;")}>
+              <h2 style={css("font-family:'Space Grotesk'; font-size:26px; font-weight:600; margin:0 0 8px;")}>
+                Start with your resume.
+              </h2>
+              <p style={css("font-size:15px; color:oklch(0.45 0.015 260); line-height:1.6; margin:0 0 24px;")}>
+                Everything the app produces is built from your profile, so the fastest way in is the
+                PDF you already send out. You'll get a review of what a parser makes of it, and you
+                choose what carries over.
+              </p>
+
+              <ResumeUploadCard
+                onAnalyzed={(result) => {
+                  setAnalysis(result);
+                  setObStep(STEP.review);
+                }}
+                footer={
+                  <div style={css("display:flex; flex-direction:column; gap:10px; align-items:center; padding-top:6px;")}>
+                    <TextLink onClick={() => setObStep(STEP.identity)}>
+                      I'd rather type it in myself
+                    </TextLink>
+                    <TextLink onClick={() => navigate(ROUTES.home)}>
+                      Skip for now — I'll set this up later
+                    </TextLink>
+                  </div>
+                }
+              />
+            </div>
+          )}
+
+          {step === STEP.identity && (
             <div style={css("animation:fadeUp .4s ease both;")}>
               <h2 style={css("font-family:'Space Grotesk'; font-size:26px; font-weight:600; margin:0 0 8px;")}>Let's build your spine.</h2>
               <p style={css("font-size:15px; color:oklch(0.45 0.015 260); line-height:1.6; margin:0 0 24px;")}>
@@ -119,35 +151,15 @@ export function Onboarding() {
                 {saving ? "Saving…" : "Continue"}
               </PrimaryButton>
 
-              <div style={css("margin-top:22px; padding-top:20px; border-top:1px solid oklch(0.94 0.006 260);")}>
-                <input
-                  ref={fileInput}
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) tryParse(file);
-                  }}
-                />
-                <div
-                  onClick={() => fileInput.current?.click()}
-                  style={css("border:2px dashed oklch(0.85 0.01 260); border-radius:14px; padding:24px; text-align:center; cursor:pointer; background:oklch(0.99 0.003 260);")}
-                >
-                  <div style={css("font-weight:600; font-size:13.5px; margin-bottom:4px;")}>Have a resume handy?</div>
-                  <div style={css("font-size:12.5px; color:oklch(0.5 0.015 260); line-height:1.5;")}>
-                    Automatic parsing isn't live yet — for now it's faster to type the one role that
-                    matters most.
-                  </div>
-                </div>
-                {parseNote && (
-                  <div style={css("margin-top:10px; font-size:12.5px; color:oklch(0.45 0.08 60); line-height:1.5;")}>{parseNote}</div>
-                )}
+              <div style={css("margin-top:16px; text-align:center;")}>
+                <TextLink onClick={() => setObStep(STEP.upload)}>
+                  Actually, I'll upload my resume
+                </TextLink>
               </div>
             </div>
           )}
 
-          {step === 1 && (
+          {step === STEP.role && (
             <div style={css("animation:fadeUp .4s ease both;")}>
               <h2 style={css("font-family:'Space Grotesk'; font-size:24px; font-weight:600; margin:0 0 6px;")}>Your most recent role.</h2>
               <p style={css("font-size:14px; color:oklch(0.45 0.015 260); margin:0 0 22px; line-height:1.6;")}>
@@ -210,8 +222,54 @@ export function Onboarding() {
               </button>
             </div>
           )}
+
+          {step === STEP.review &&
+            (analysis ? (
+              <div style={css("animation:fadeUp .4s ease both;")}>
+                <ParsedResumeReview
+                  parsed={analysis.parsed}
+                  sample={analysis.sample}
+                  onApplied={() => navigate(ROUTES.resume)}
+                  footer={
+                    <TextLink onClick={() => navigate(ROUTES.home)}>
+                      Skip — take me in with an empty profile
+                    </TextLink>
+                  }
+                />
+              </div>
+            ) : (
+              <div style={css("animation:fadeUp .4s ease both;")}>
+                <h2 style={css("font-family:'Space Grotesk'; font-size:22px; font-weight:600; margin:0 0 8px;")}>
+                  That review has gone.
+                </h2>
+                <p style={css("font-size:14px; color:oklch(0.45 0.015 260); line-height:1.6; margin:0 0 22px;")}>
+                  A parse only lives as long as the screen showing it. Your file is still uploaded —
+                  the full report is on your profile, and you can review the roles from there.
+                </p>
+                <PrimaryButton
+                  onClick={() => navigate(ROUTES.resume)}
+                  style={{ width: "100%", padding: "14px", fontSize: "15px", borderRadius: "11px" }}
+                >
+                  Open the report
+                </PrimaryButton>
+                <div style={css("margin-top:14px; text-align:center;")}>
+                  <TextLink onClick={() => setObStep(STEP.upload)}>Start again</TextLink>
+                </div>
+              </div>
+            ))}
         </div>
       </div>
     </div>
+  );
+}
+
+function TextLink({ children, onClick }: { children: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={css("background:none; border:none; font-size:13.5px; color:oklch(0.5 0.015 260); cursor:pointer; padding:0;")}
+    >
+      {children}
+    </button>
   );
 }

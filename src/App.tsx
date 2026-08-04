@@ -13,6 +13,7 @@ import { Applications } from "./components/Applications";
 import { AppDetail } from "./components/AppDetail";
 import { Debrief } from "./components/Debrief";
 import { Profile } from "./components/Profile";
+import { ResumeReport } from "./components/ResumeReport";
 import { Discover } from "./components/Discover";
 import { Practice } from "./components/Practice";
 import { Settings } from "./components/Settings";
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="applications/:id" element={<AppDetail />} />
           <Route path="applications/:id/recap/new" element={<Debrief />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="resume" element={<ResumeReport />} />
           <Route path="discover" element={<Discover />} />
           <Route path="practice" element={<Practice />} />
           <Route path="settings" element={<Settings />} />

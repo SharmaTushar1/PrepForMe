@@ -57,6 +57,26 @@ export interface Profile {
   noticePeriod: string | null;
   workAuthorization: string | null;
   salaryExpectation: string | null;
+  /** The upload that counts as this user's canonical resume. */
+  baseResumeId: string | null;
+}
+
+export type ResumeStatus = "uploaded" | "analyzing" | "analyzed" | "failed";
+
+/** One uploaded PDF. The file itself lives in the private `resumes` bucket. */
+export interface Resume {
+  id: string;
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  /** Null until an analyzer has opened the file. */
+  pageCount: number | null;
+  status: ResumeStatus;
+  /** What went wrong, written for the user — shown verbatim. */
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ExperienceBullet {

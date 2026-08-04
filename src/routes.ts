@@ -9,6 +9,7 @@ export const ROUTES = {
   applicationTab: (id: string, tab: string) => `/app/applications/${id}?tab=${tab}`,
   newRecap: (id: string) => `/app/applications/${id}/recap/new`,
   profile: "/app/profile",
+  resume: "/app/resume",
   discover: "/app/discover",
   practice: "/app/practice",
   settings: "/app/settings",

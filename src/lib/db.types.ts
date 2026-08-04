@@ -3,7 +3,13 @@
  * data layer has a single definition of what comes back over the wire; keep
  * these in step with the SQL.
  */
-import type { Stage } from "../types";
+import type { ResumeStatus, Stage } from "../types";
+import type {
+  AtsCategoryId,
+  AtsReport,
+  ParsedResume,
+  ResumeEditStatus,
+} from "./ai/types";
 
 export interface ProfileRow {
   id: string;
@@ -13,6 +19,7 @@ export interface ProfileRow {
   notice_period: string | null;
   work_authorization: string | null;
   salary_expectation: string | null;
+  base_resume_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -132,4 +139,80 @@ export interface PrepMessageRow {
 export interface PrepCitation {
   label: string;
   layer: "company" | "role" | "personal" | "general";
+}
+
+export interface ResumeRow {
+  id: string;
+  user_id: string;
+  /** `{user_id}/{resume_id}.pdf` inside the private `resumes` bucket. */
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  byte_size: number;
+  /** Null until the analyzer has opened the file. */
+  page_count: number | null;
+  status: ResumeStatus;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * The two jsonb columns are the same shapes the provider returns, not loose
+ * records — `src/lib/ai/types.ts` is the single definition of both, and the
+ * Edge Function writes what it just returned.
+ */
+export interface ResumeReportRow {
+  id: string;
+  user_id: string;
+  resume_id: string;
+  model: string;
+  overall_score: number;
+  summary: string | null;
+  report: AtsReport;
+  parsed: ParsedResume;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  created_at: string;
+}
+
+/**
+ * One rewrite pass. Inserted as `running` before the model call, so the row is
+ * also the lock a second press is refused against.
+ */
+export interface ResumeImprovementRow {
+  id: string;
+  user_id: string;
+  resume_id: string;
+  report_id: string;
+  model: string;
+  status: "running" | "done" | "failed";
+  error: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * One proposed rewrite of one line. `original` is verbatim from the parse and is
+ * the key an accepted rewrite is substituted on, so nothing may normalise it.
+ */
+export interface ResumeEditRow {
+  id: string;
+  user_id: string;
+  improvement_id: string;
+  resume_id: string;
+  report_id: string;
+  category: AtsCategoryId;
+  finding_title: string;
+  original: string;
+  suggested: string;
+  note: string;
+  has_blank: boolean;
+  flag: string;
+  status: ResumeEditStatus;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 }

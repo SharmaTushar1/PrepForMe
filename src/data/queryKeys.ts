@@ -15,4 +15,15 @@ export const keys = {
     ["prepSources", userId, applicationId] as const,
   prepMessages: (userId: string, applicationId: string) =>
     ["prepMessages", userId, applicationId] as const,
+  resume: (userId: string, resumeId: string) => ["resume", userId, resumeId] as const,
+  resumeReport: (userId: string, resumeId: string) =>
+    ["resumeReport", userId, resumeId] as const,
+  resumeFile: (userId: string, resumeId: string) => ["resumeFile", userId, resumeId] as const,
+  /**
+   * Keyed by report, not by resume: suggestions are about one reading of the
+   * file, so re-analyzing it leaves them behind rather than mixing them into the
+   * new report's list.
+   */
+  resumeEdits: (userId: string, reportId: string) =>
+    ["resumeEdits", userId, reportId] as const,
 };

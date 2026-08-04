@@ -20,6 +20,7 @@ function toProfile(row: ProfileRow): Profile {
     noticePeriod: row.notice_period,
     workAuthorization: row.work_authorization,
     salaryExpectation: row.salary_expectation,
+    baseResumeId: row.base_resume_id,
   };
 }
 

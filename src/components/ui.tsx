@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { css } from "../css";
 import { ACCENT } from "../data";
@@ -239,6 +240,125 @@ export function Spinner({ size = 26 }: { size?: number }) {
         borderWidth: `${Math.max(2, Math.round(size / 9))}px`,
       }}
     ></div>
+  );
+}
+
+/** "48s", "1m 12s" — short enough to sit in a bar's caption. */
+function duration(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+/**
+ * Keep counting between heartbeats.
+ *
+ * The server says how long a step has been running every few seconds, and a
+ * caption that jumps six seconds at a time reads as broken. So the last report is
+ * used as an anchor and the local clock fills the gaps — which measures real
+ * elapsed time rather than guessing at progress, and resets to the server's
+ * number every time one arrives.
+ */
+function useElapsed(reportedMs: number | undefined): number {
+  const anchor = useRef({ at: 0, ms: 0 });
+  const [, tick] = useState(0);
+
+  if (reportedMs !== undefined && reportedMs !== anchor.current.ms) {
+    anchor.current = { at: Date.now(), ms: reportedMs };
+  }
+
+  useEffect(() => {
+    if (reportedMs === undefined) return;
+    const timer = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(timer);
+  }, [reportedMs === undefined]);
+
+  if (reportedMs === undefined) return 0;
+  return anchor.current.ms + (Date.now() - anchor.current.at);
+}
+
+/**
+ * A determinate bar for work that reports real milestones.
+ *
+ * `step` and `total` come from the thing doing the work, so this never animates
+ * on its own: if the bar is still, nothing is happening, and that is information
+ * rather than a glitch. Anything that can't report its progress gets a
+ * `Spinner`, which promises nothing, instead of a bar that invents a number.
+ *
+ * `waiting` is the honest middle ground, for a step that is genuinely running
+ * with nothing observable inside it. The solid fill stays where the work actually
+ * is; a paler fill creeps toward the next step in proportion to elapsed against
+ * typical, stops dead at that boundary, and is captioned in seconds so it reads
+ * as a clock rather than as a claim about progress.
+ */
+export function ProgressBar({
+  step,
+  total,
+  label,
+  note,
+  waiting,
+}: {
+  step: number;
+  total: number;
+  label: string;
+  /** Standing context, e.g. what the wait is for. Not the current step. */
+  note?: string;
+  waiting?: { elapsedMs: number; expectedMs: number };
+}) {
+  const pct = total > 0 ? Math.min(100, Math.round((step / total) * 100)) : 0;
+  const nextPct = total > 0 ? Math.min(100, Math.round(((step + 1) / total) * 100)) : 0;
+
+  const elapsedMs = useElapsed(waiting?.elapsedMs);
+  const share = waiting && waiting.expectedMs > 0
+    ? Math.min(1, elapsedMs / waiting.expectedMs)
+    : 0;
+  const ghostPct = waiting ? pct + (nextPct - pct) * share : pct;
+  const overrun = waiting ? elapsedMs > waiting.expectedMs : false;
+
+  return (
+    <div
+      role="progressbar"
+      aria-valuenow={step}
+      aria-valuemin={0}
+      aria-valuemax={total}
+      aria-valuetext={waiting ? `${label}, ${duration(elapsedMs)} so far` : label}
+      style={css("width:100%; max-width:420px; margin:0 auto;")}
+    >
+      <div style={css("display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:8px;")}>
+        <span style={css("font-size:13px; font-weight:600; text-align:left;")}>{label}</span>
+        <span style={css("font-family:'IBM Plex Mono'; font-size:11.5px; color:oklch(0.55 0.015 260); flex-shrink:0;")}>
+          {waiting ? duration(elapsedMs) : `${pct}%`}
+        </span>
+      </div>
+
+      <div style={css("position:relative; height:6px; border-radius:100px; background:oklch(0.92 0.006 260); overflow:hidden;")}>
+        <div
+          style={{
+            ...css("position:absolute; inset:0 auto 0 0; height:100%; border-radius:100px; background:oklch(0.55 0.15 255 / 0.28); transition:width 1s linear;"),
+            width: `${ghostPct}%`,
+          }}
+        ></div>
+        <div
+          style={{
+            ...css("position:absolute; inset:0 auto 0 0; height:100%; border-radius:100px; background:oklch(0.55 0.15 255); transition:width .35s ease;"),
+            width: `${pct}%`,
+          }}
+        ></div>
+      </div>
+
+      <div style={css("display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-top:8px;")}>
+        <span style={css("font-size:12px; color:oklch(0.5 0.015 260); line-height:1.5; text-align:left;")}>
+          {waiting
+            ? overrun
+              ? `Longer than the usual ${duration(waiting.expectedMs)}. It is still running — nothing has failed.`
+              : `Usually about ${duration(waiting.expectedMs)}.`
+            : note}
+        </span>
+        <span style={css("font-family:'IBM Plex Mono'; font-size:11px; color:oklch(0.6 0.015 260); flex-shrink:0; margin-left:auto;")}>
+          step {Math.min(step, total)} of {total}
+        </span>
+      </div>
+    </div>
   );
 }
 

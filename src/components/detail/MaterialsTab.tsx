@@ -3,6 +3,7 @@ import { css } from "../../css";
 import { ai, type AtsKeyword, type TailoringResult } from "../../lib/ai";
 import { useUpdateApplication } from "../../data/applications";
 import { useProfileContext } from "../../data/profile";
+import { useBaseResume } from "../../data/resumes";
 import type { DecoratedApp } from "../../data/derived";
 import { ROUTES } from "../../routes";
 import { EmptyState, PrimaryButton, SecondaryButton, TextArea } from "../ui";
@@ -12,6 +13,7 @@ export function MaterialsTab({ app }: { app: DecoratedApp }) {
   const navigate = useNavigate();
   const context = useProfileContext();
   const update = useUpdateApplication();
+  const baseResume = useBaseResume();
 
   const [result, setResult] = useState<TailoringResult | null>(null);
   const [running, setRunning] = useState(false);
@@ -105,6 +107,20 @@ export function MaterialsTab({ app }: { app: DecoratedApp }) {
           {result || app.resumeTailored ? "↻ Re-tailor" : "Tailor for this role"}
         </button>
       </div>
+
+      {baseResume.resume && (
+        <div style={css("font-size:12.5px; color:oklch(0.5 0.015 260); line-height:1.6; margin-bottom:18px; max-width:640px;")}>
+          <strong style={css("color:oklch(0.3 0.02 260);")}>Base resume:</strong>{" "}
+          {baseResume.resume.fileName} — tailoring rewrites the bullets on your profile, which is
+          where that file's roles land once you review them. The PDF itself is never edited.{" "}
+          <button
+            onClick={() => navigate(ROUTES.resume)}
+            style={css("font-family:'IBM Plex Sans'; font-size:12.5px; font-weight:600; color:oklch(0.4 0.13 255); background:none; border:none; cursor:pointer; padding:0;")}
+          >
+            Its ATS report →
+          </button>
+        </div>
+      )}
 
       {bulletCount === 0 && (
         <div style={css("margin-bottom:24px;")}>

@@ -11,6 +11,14 @@ const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
  */
 export const isSupabaseConfigured = Boolean(url && publishableKey);
 
+/**
+ * The Functions base URL and key, for the one call that can't go through
+ * `functions.invoke`: it buffers the whole response, and the analyzer streams
+ * its progress. See `src/lib/ai/edge.ts`.
+ */
+export const functionsUrl = `${(url || "http://localhost:54321").replace(/\/+$/, "")}/functions/v1`;
+export const supabaseKey = publishableKey || "key-not-configured";
+
 export const supabase = createClient(
   url || "http://localhost:54321",
   publishableKey || "key-not-configured",

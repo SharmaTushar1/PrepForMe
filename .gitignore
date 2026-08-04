@@ -4,3 +4,10 @@ dist-ssr
 *.local
 .DS_Store
 .vite
+
+# Every env file, at every depth — a pattern with no slash matches in any
+# directory, which is what covers supabase/functions/.env as well as the root.
+# The example file carries no values and stays tracked.
+.env
+.env.*
+!.env.example

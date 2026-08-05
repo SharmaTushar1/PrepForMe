@@ -12,7 +12,7 @@
 
 ### Working, persisted, multi-user (the skeleton is real)
 - **Auth** — magic-link sign-in, session guard, query cache cleared per account.
-- **Database** — 18-table Postgres schema, RLS on every table, Data API grants applied, triggers (seed profile/settings on signup, stage-event history, `applied_at` stamp, `updated_at`). All of it is now on Supabase Mumbai as well as the local stack: the first 14 tables since 2 Aug, and `0004`/`0005`'s four resume tables plus the private Storage bucket since 5 Aug, applied by hand because the hosted project has no migration ledger (see TECHNICAL.md §9) and verified equal to local table-for-table, policy-for-policy, grant-for-grant.
+- **Database** — 19-table Postgres schema, RLS on every table, Data API grants applied, triggers (seed profile/settings on signup, stage-event history, `applied_at` stamp, `updated_at`). Mostly on Supabase Mumbai as well as the local stack: the first 14 tables since 2 Aug, and `0004`/`0005`'s four resume tables plus the private Storage bucket since 5 Aug, applied by hand because the hosted project has no migration ledger (see TECHNICAL.md §7) and verified equal to local table-for-table, policy-for-policy, grant-for-grant. **`0006` — the `ai_usage` allowance ledger and the narrowed `user_settings` grants — is local-only so far, and the hosted project must not get the Edge Functions before it does:** without it the functions would fail their allowance check, and with the old grants a user could still make themselves `pro`.
 - **Profile spine** — view/edit structured profile: experiences, bullets (toggleable), skills. Not text blobs.
 - **Base resume** — PDF upload from onboarding or the profile into a private per-user Storage bucket, then a separate explicit "Analyze resume" press, since the upload itself calls no model. Plus an ATS report screen and a parse review that writes roles, bullets and skills onto the spine only once the user ticks them off. Every state is built against the local sample: empty, uploading, stored-but-unread, refused, failed, stopped-partway, analyzed. Not yet applied to the hosted project.
 - **Application tracker** — add/edit roles, stages `Saved → Applied → Screen → Technical → Onsite → Offer` (+ Rejected/Withdrawn). Stage history append-only.
@@ -33,7 +33,7 @@
 - **Discover** (job feeds), **Practice**, **browser extension** — placeholders.
 - **Unused tables** — `referral_contacts`, `tailorings`, `tailoring_changes`, `ats_keywords` exist and are policied but nothing reads/writes them.
 - **Kanban drag-and-drop** — not built.
-- **Still no spend cap set**, no tests, no CI, no linter, one 677 kB bundle.
+- No tests, no CI, no linter, one 724 kB bundle. *(The spend cap is now set, and a per-user allowance sits in front of it — see Part B step 1.)*
 
 ### One thing to fix immediately (honesty)
 The landing page headline shows **"2.4× higher response rate."** PROJECT.md §5 explicitly forbids "false Nx-your-chances" multiplier claims. Replace it with an honest, mechanism-based stat (or a testimonial/coverage stat) before showing this to testers or paying users.
@@ -44,11 +44,11 @@ The landing page headline shows **"2.4× higher response rate."** PROJECT.md §5
 
 These are the immediate on-ramp before feature work. None is optional; each unblocks the rest.
 
-> **On "spend per user":** the rupee figures in PROJECT.md §8 (≈₹10/user cheap tier, ≈₹220/user premium) are *cost projections*, not anything configured. An Anthropic key now exists, lives in `supabase/.env.local`, and local dev is pointed at it, so **the only thing between that key and a bill was somebody pressing the button — and on 4 Aug somebody did, nine times, for about forty-five cents, with still no spend cap.** Step 1 below is ten minutes and is now overdue rather than pre-emptive. The measured data points: a one-page analysis costs $0.09–0.10 with over half of it thinking tokens, a rewrite pass about a cent, and **roughly fifteen cents of the total bought nothing at all** — two analyses billed and then lost, one to a truncated answer and one to a runtime CPU kill.
+> **On "spend per user":** the rupee figures in PROJECT.md §8 (≈₹10/user cheap tier, ≈₹220/user premium) were *cost projections*, and as of 5 Aug there is something configured behind them. **Two limits, doing different jobs:** a monthly cap at Anthropic, which bounds the bill, and a per-user allowance in `0006`, which bounds any one signup's share of it — one analysis and one rewrite pass a month on the free plan. The allowance counts *attempts*, not saved reports, because the measured data points say why: a one-page analysis costs $0.09–0.10 with over half of it thinking tokens, a rewrite pass about a cent, and **roughly fifteen cents of the total bought nothing at all** — two analyses billed and then lost, one to a truncated answer and one to a runtime CPU kill. A limit counting only successes would not have counted either of those.
 
-1. **Pick and create an LLM provider account** — done, Anthropic. **Set a hard spend cap + billing alert ($20–30)** on that dashboard — **not done, and now the single most overdue item on this page.** The cap was meant to go on before anything was wired; instead a whole analyzer got built behind it, and then local dev was pointed at it while the cap still didn't exist. The rule in PROJECT.md §7 — nothing calls the API until the cap is set — has now been broken three times. Ten minutes.
+1. ~~**Pick and create an LLM provider account, and set a hard spend cap + billing alert.**~~ **Done, Anthropic, monthly cap set on 5 Aug** — after the rule in PROJECT.md §7 had been broken three times, so the sequencing lesson stands even though the item is closed. **A cap alone was never enough once the app was publicly reachable:** it bounds the account, not the individual, so one stranger with a script could exhaust the month for everybody. The per-user allowance in `0006` is the other half — one analysis and one rewrite a month on the free plan, counted over an attempts ledger so a *failed* billed call still counts. See TECHNICAL.md §8.
 2. ~~**Stand up the server-side provider seam.**~~ **Done.** `supabase/functions/analyze-resume` is the first Edge Function; `src/lib/ai/edge.ts` is the second `AiProvider`, selected by `VITE_AI_PROVIDER`, with `mock.ts` still the default. The key lives in the function's env, never in the bundle. Served locally and pointed at from `npm run dev`. The call has now run for real and returned a report; the two failures before it were about the schema and the token budget, not the seam (TECHNICAL.md §8). The response streams, and the UI draws progress from it.
-3. **Ship the corpus data-model migration (`0006`).** Add the `(company, role, level, interview_type)` content key, a `provenance` tag, a `corroboration_count`, and a `pgvector` embedding column to the prep content tables. This is PROJECT.md §13's "design before building more prep UI" step — retrofitting it later is far more expensive. *Renumbered twice: `0004` went to the base resume and `0005` to the rewrite tables.*
+3. **Ship the corpus data-model migration (`0007`).** Add the `(company, role, level, interview_type)` content key, a `provenance` tag, a `corroboration_count`, and a `pgvector` embedding column to the prep content tables. This is PROJECT.md §13's "design before building more prep UI" step — retrofitting it later is far more expensive. *Renumbered three times: `0004` went to the base resume, `0005` to the rewrite tables, `0006` to the per-user AI allowance.*
 4. ~~**Wire real resume parsing** (`parseResume`) through the new provider.~~ **Done, in a better shape than planned:** the PDF goes to Storage on one press and one Claude call returns an ATS report and a structured parse together on a second, reviewed item by item before anything reaches the profile. Two presses because the analysis is the only part that costs anything. Onboarding's front door works, and the seam is proven end to end against the real model: a scored report and a parse of four roles and thirty skills, from an actual PDF.
 
 ---
@@ -56,7 +56,7 @@ These are the immediate on-ramp before feature work. None is optional; each unbl
 ## Part C — Prioritized feature roadmap (highest → lowest)
 
 ### Phase 0 — Foundations (Part B above)
-Done: Edge Function provider · resume parsing · resume rewriting. **Outstanding: spend cap · first real rewrite call · corpus migration `0006`.**
+Done: Edge Function provider · resume parsing · resume rewriting · spend cap · per-user allowance. **Outstanding: deploying both functions to the hosted project · corpus migration `0007`.**
 
 ### Phase 1 — Make truthful tailoring real (P0)
 - Replace mock `tailorResume` + `atsGap` with real model calls behind the Edge Function.
@@ -65,7 +65,7 @@ Done: Edge Function provider · resume parsing · resume rewriting. **Outstandin
 
 ### Phase 2 — Build the moat: company prep RAG + compounding loop (P0, the differentiator)
 - **Ingest** first-party company info (DIY fetch + Readability/Cheerio) for a given company.
-- **Embed** with `text-embedding-3-small`; store in the pgvector column from migration `0006`.
+- **Embed** with `text-embedding-3-small`; store in the pgvector column from migration `0007`.
 - **Scoped retrieval** by `(company, role, level, interview_type)` metadata filter → real prep chat answers.
 - **Provenance on every answer** ("company site" / "N candidate reports" / "general pattern" / "AI-inferred, unconfirmed"). Never present fabricated company-specific facts (PROJECT.md §3).
 - **Close the loop:** logged interview notes feed back into the prep space, and the UI *shows* it deepening ("prep space levels up").
@@ -99,7 +99,7 @@ Done: Edge Function provider · resume parsing · resume rewriting. **Outstandin
 ---
 
 ## Part D — Strategic fork to decide (doesn't block building)
-PROJECT.md §12 leaves one question open: **personal/portfolio tool vs. real multi-user business.** The plan above is built so you don't have to answer yet — Phases 0–3 give a genuinely sellable single-user MVP, and the `0006` migration means the cross-user corpus (Phase 5) can turn on later without a rewrite. Recommended default (matches the docs): **start single-user, dogfood on your own switch, harden only if earned.** If it becomes a business, commit to the India wedge or B2B rather than generic B2C.
+PROJECT.md §12 leaves one question open: **personal/portfolio tool vs. real multi-user business.** The plan above is built so you don't have to answer yet — Phases 0–3 give a genuinely sellable single-user MVP, and the `0007` migration means the cross-user corpus (Phase 5) can turn on later without a rewrite. Recommended default (matches the docs): **start single-user, dogfood on your own switch, harden only if earned.** If it becomes a business, commit to the India wedge or B2B rather than generic B2C.
 
 ---
 
@@ -107,4 +107,4 @@ PROJECT.md §12 leaves one question open: **personal/portfolio tool vs. real mul
 
 Done, out of order: **Edge Function provider** and **resume parsing**. The rest:
 
-`spend cap → apply 0004 and 0005 to the hosted project + deploy the functions + one real call → 0006 corpus migration → truthful tailoring/ATS → company-prep RAG + compounding loop → [MVP] → confidence + privacy + observability + landing fix → job discovery + alerts + network + extension → mock interview + evals + practice + payments + corpus flywheel`
+`apply 0006 to the hosted project + deploy the functions + VITE_AI_PROVIDER on Vercel + one real call → 0007 corpus migration → truthful tailoring/ATS → company-prep RAG + compounding loop → [MVP] → confidence + privacy + observability + landing fix → job discovery + alerts + network + extension → mock interview + evals + practice + payments + corpus flywheel`

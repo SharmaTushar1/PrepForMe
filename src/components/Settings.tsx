@@ -8,6 +8,7 @@ import { useProfile } from "../data/profile";
 import { useSettings, useUpdateSettings } from "../data/settings";
 import { useDecoratedApplications } from "../data/derived";
 import { useClearCorpus, useExportData } from "../data/exportData";
+import { useAiUsage, type Feature } from "../data/usage";
 import { PrimaryButton, SecondaryButton, Select, Toggle } from "./ui";
 
 export function Settings() {
@@ -127,6 +128,8 @@ export function Settings() {
           </Row>
         </div>
 
+        <PlanAllowances />
+
         <div style={css("border:1px solid oklch(0.9 0.006 260); border-radius:12px; padding:18px; background:#fff;")}>
           <div style={css("display:flex; align-items:center; justify-content:space-between; gap:14px;")}>
             <div>
@@ -197,6 +200,61 @@ export function Settings() {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * What the current plan buys, and how much of it is left.
+ *
+ * Every number is read through `useAiUsage`, so it comes from the same limits and
+ * the same ledger the Edge Functions enforce against — this card cannot promise
+ * an allowance the server will not honour.
+ */
+function PlanAllowances() {
+  return (
+    <div style={css("border:1px solid oklch(0.9 0.006 260); border-radius:12px; padding:18px; background:#fff;")}>
+      <div style={css("font-family:'Space Grotesk'; font-size:15px; font-weight:600; margin-bottom:4px;")}>
+        What your plan includes
+      </div>
+      <div style={css("font-size:12.5px; color:oklch(0.5 0.015 260); margin-bottom:12px;")}>
+        These are real model calls, so they're metered. Allowances reset in UTC.
+      </div>
+
+      <AllowanceRow feature="resume_analysis" label="Resume analysis" />
+      <AllowanceRow feature="resume_rewrite" label="Resume rewrites" />
+      <AllowanceRow feature="chat" label="Practice chat" />
+
+      <div style={css("font-size:12px; color:oklch(0.5 0.015 260); line-height:1.55; margin-top:10px; padding-top:10px; border-top:1px solid oklch(0.94 0.005 260);")}>
+        {/* Said plainly rather than left to be inferred from the padlock in the
+            sidebar: the chat allowance is listed so the plan is complete, but
+            nothing spends it yet, so it will read as untouched. */}
+        Practice chat arrives in a later version. Its allowance is listed here for completeness —
+        nothing draws on it today.
+      </div>
+    </div>
+  );
+}
+
+function AllowanceRow({ feature, label }: { feature: Feature; label: string }) {
+  const { status, isSuccess } = useAiUsage(feature);
+
+  return (
+    <Row label={label}>
+      <span style={css("font-family:'IBM Plex Mono'; font-size:12px;")}>
+        {status.limit} a {status.periodNoun}
+        {isSuccess && (
+          <span
+            style={css(
+              `margin-left:8px; color:${
+                status.remaining > 0 ? "oklch(0.45 0.015 260)" : "oklch(0.5 0.14 25)"
+              };`,
+            )}
+          >
+            · {status.remaining} left
+          </span>
+        )}
+      </span>
+    </Row>
   );
 }
 

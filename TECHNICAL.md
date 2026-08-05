@@ -317,19 +317,26 @@ Files in [`supabase/migrations/`](supabase/migrations), applied in filename orde
 | `0003_grants.sql` | Data API grants to the `authenticated` role |
 | `0004_resumes.sql` | `resumes` bucket and its four storage policies, `resumes` and `resume_reports`, `profiles.base_resume_id`, RLS, grants |
 | `0005_resume_edits.sql` | `resume_improvements` and `resume_edits`, RLS, grants, `updated_at` triggers |
+| `0006_ai_quota.sql` | `ai_usage` attempts ledger, and narrowed `user_settings` grants so `plan` is not self-service |
 
-The first three are applied to the hosted project and verified working. `0004` and `0005`
-have been applied to the local stack and checked there: all four tables with their
-`authenticated` grants, the private `resumes` bucket with its four storage policies, and
-`profiles.base_resume_id`. **Neither is applied to the hosted project.**
+`0001`–`0005` are applied to the hosted project. `0006` is applied locally; the hosted half
+is pending.
 
-They were applied by pasting into the Supabase SQL Editor, and the CLI is not linked, so
-`supabase_migrations.schema_migrations` is empty; if you later run `supabase db push` it
-will try to replay `0001` and fail on existing objects. Run
-`supabase migration repair --status applied 0001 0002 0003` first.
+**The hosted ledger is not to be trusted, and this has already bitten.** Several migrations
+were applied there by hand — SQL Editor and the Management API — so
+`supabase_migrations.schema_migrations` does not reflect what the database contains. A
+`supabase db push` will try to replay from `0001` and fail on existing objects. Repair the
+history first (`supabase migration repair --status applied 0001 0002 0003 0004 0005`) or keep
+applying by hand.
+
+The local ledger had the same drift and was repaired on 2026-08-05: `0005` existed as tables
+but not as a row, so `migration up` tried to recreate `resume_improvements` and failed with
+42P07. `supabase migration repair --status applied 0005 --local` fixed it, and `0006` then
+applied normally. If a local `migration up` fails on "already exists", this is why.
 
 Note that the corpus migration described in [BUILD_PLAN.md](BUILD_PLAN.md) is now
-`0006`. It was planned as `0004`, and the resume work has taken two numbers ahead of it.
+`0007`. It was planned as `0004`; the resume and quota work have taken three numbers ahead
+of it.
 
 **Treat an applied migration as immutable.** Editing `0001` changes nothing in a database
 that already ran it. Every change is a new numbered file — which is exactly why the
@@ -495,18 +502,41 @@ write — before a token was spent on any of it.
 
 1. An existing report refuses a re-run with 409 unless `force`.
 2. A time-boxed in-flight lock, held for three minutes.
-3. Ten analyses per user per UTC day, counted over `resume_reports`.
+3. The plan's allowance — one analysis a month on free — counted over `ai_usage`.
 4. 15 pages and 10 MB, both checked against the real bytes.
 
-The lock is the one with a trap in it — see §10. And guard 3 does not do what its name
-implies: `assertUnderDailyCap` counts rows in `resume_reports`, which are *successful*
-analyses. A call that reaches Anthropic and is billed but then fails validation, or dies
-after the response arrives, never counts against the ten. So the cap limits successes,
-not spend, and an analysis that fails repeatedly can bill straight past it. **That is an
-open defect, not a design choice.** The honest fix is an attempts ledger — a row written
-*before* the model call rather than after — which is a migration and is not being done
-now. **None of these guards is a substitute for a billing cap on the account, and that
-cap still does not exist.**
+The lock is the one with a trap in it — see §10.
+
+**Guard 3 used to be the hole and is now the fix.** It was ten a day counted over
+`resume_reports`, which are *successful* analyses: a call that reached Anthropic, was
+billed, and then failed validation left no row and never counted, so a repeatedly failing
+analysis could bill straight past the cap. That was survivable at ten a day and is not at
+one a month, which is what the free tier became once the app was publicly reachable.
+
+So the count moved to `ai_usage` (migration `0006_ai_quota.sql`), a ledger of **attempts**.
+`spendAllowance` writes the row immediately before the model call — after every guard that
+can refuse for free, and before the 200 that can no longer carry a refusal — so what is
+counted is what is charged. A failed run costs the user their allowance, which is the
+deliberate half of the trade: the alternative is a free retry loop at ten cents a go.
+
+Two things make the allowance real rather than advisory:
+
+- **`plan` is not client-writable.** `user_settings` had a `for all` policy and a
+  table-wide `update` grant, so any signed-in user could `PATCH` themselves to `pro`.
+  0006 narrows the `update` *and* `insert` grants to the columns the app actually
+  writes — insert too, because `delete` was granted as well, so the row could otherwise
+  be dropped and re-inserted as `pro`.
+- **The ledger cannot be rewound.** `ai_usage` grants `select, insert` and deliberately
+  not `update, delete`. Inserting spends an allowance, so a forged write only harms the
+  forger; raising one would need a delete.
+
+The limits themselves live in [`_shared/plans.ts`](supabase/functions/_shared/plans.ts),
+which the React app imports too, so the number displayed next to a button is by
+construction the number the function enforces. It sits under `supabase/functions/` because
+the deploy bundle can only follow imports inside that tree, while Vite can reach anywhere.
+
+**None of this is a substitute for a billing cap on the account** — it bounds one user,
+not the sum of them. A monthly cap is now set at `console.anthropic.com`.
 
 **The schema shapes the code more than you'd expect.** Anthropic's structured outputs
 drop numeric and string-length constraints silently, cap optional properties at 24 and
@@ -595,9 +625,10 @@ happened here with a deliberately stale token and produced exactly that: a compl
 validated, billed report discarded at the insert. A 90-second job wants either a refreshed
 token or a service-role write for the final insert.
 
-**What is still not in place is the spend cap at `console.anthropic.com`**, and the argument
-for it stopped being hypothetical the moment a billed call returned nothing — which has now
-happened twice. See [BUILD_PLAN.md](BUILD_PLAN.md) Part B step 1.
+**The spend cap at `console.anthropic.com` is now set**, which was overdue: the argument for
+it stopped being hypothetical the moment a billed call returned nothing, and that had
+happened twice. The per-user allowance above is the other half — the cap bounds the account,
+the allowance bounds each person who signs up, and neither substitutes for the other.
 
 ### The `improve-resume` Edge Function
 
@@ -620,12 +651,17 @@ written. Counted forward from a cursor, not by re-matching the buffer each delta
 cursor is held by hand because a failed `exec` resets `lastIndex` to zero and would recount
 every key from the start.
 
-Same four-guard shape too — already improved (409 unless `force`), a three-minute
-in-flight lock, ten passes per UTC day — and **the daily cap has the same defect
-described in §8**: it counts rows in `resume_improvements`, which are written *before*
-the model call here, so unlike the analyzer's it does bound attempts rather than
-successes. That is an accident of ordering, not a fix; the analyzer still needs its
-ledger.
+Same guard shape too — already improved (409 unless `force`), a three-minute in-flight
+lock, and the plan's rewrite allowance, one a month on free. It counts over `ai_usage`
+like the analyzer now does. Before that it counted `resume_improvements`, which are
+written *before* the model call here, so it happened to bound attempts rather than
+successes — the right behaviour by accident of ordering, and now the right behaviour on
+purpose in both functions.
+
+The rewrite has its **own** allowance rather than sharing the analysis one. It only exists
+to act on a report, so a user who has spent the month's analysis should still be able to get
+the rewrites that go with it; sharing a counter would make the second half of the feature
+unreachable for anyone who used the first.
 
 **What it refuses to do is most of the design.** The prompt may only rewrite lines it was
 given, and `validate.ts` enforces that independently: `rewritableLines` builds the set of

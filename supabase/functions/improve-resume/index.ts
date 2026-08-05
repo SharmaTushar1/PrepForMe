@@ -16,6 +16,7 @@ import {
   type Environment,
   type ModelResult,
 } from "../_shared/model.ts";
+import { assertUnderAllowance, spendAllowance } from "../_shared/quota.ts";
 import { buildImprovePrompt } from "../_shared/prompt.ts";
 import {
   improvementSchema,
@@ -51,12 +52,10 @@ import { ImprovementFormatError, normalizeEdits } from "../_shared/validate.ts";
 
 // ------------------------------------------------------------------- guards
 
-/**
- * Per user, per UTC day. Lower than the analysis cap because a pass is cheap and
- * because there is no honest reason to want ten sets of rewrites for the same
- * report in one day — that is a stuck client, not a person iterating.
- */
-const MAX_PASSES_PER_DAY = 10;
+// The per-user allowance lives in `_shared/plans.ts`, counted over `ai_usage` by
+// `_shared/quota.ts`. A rewrite has its own allowance rather than sharing the
+// analysis one: it only exists to act on a report, so a user who has spent their
+// analysis for the month should still be able to get the rewrites for it.
 
 /**
  * How long a `running` pass row is believed before another may start.
@@ -175,7 +174,7 @@ async function improve(req: Request): Promise<Response> {
 
   await assertNotAlreadyImproved(client, report.id, force);
   await assertNotAlreadyRunning(client, report.id);
-  await assertUnderDailyCap(client, user.id);
+  await assertUnderAllowance(client, user.id, "resume_rewrite");
 
   // Inserted before the model call, because this row *is* the lock. A second
   // press between here and the response finds it and is refused.
@@ -185,6 +184,12 @@ async function improve(req: Request): Promise<Response> {
     reportId: report.id,
     model: env.model,
   });
+
+  // Last point before the model call, and before the 200 that can no longer
+  // carry a refusal. After `openPass` for the same reason as in analyze-resume:
+  // failing to spend after locking costs a wait, failing to lock after spending
+  // costs an allowance.
+  await spendAllowance(client, user.id, "resume_rewrite", report.resume_id);
 
   return streamImprovement({ client, env, userId: user.id, report, lines, passId: pass });
 }
@@ -409,31 +414,6 @@ async function assertNotAlreadyRunning(
     "Rewrites are already being written for this report. Give it a moment — they appear on their own when they land.",
     409,
   );
-}
-
-async function assertUnderDailyCap(
-  client: SupabaseClient,
-  userId: string,
-): Promise<void> {
-  const midnightUtc = new Date();
-  midnightUtc.setUTCHours(0, 0, 0, 0);
-
-  const { count, error } = await client
-    .from("resume_improvements")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("created_at", midnightUtc.toISOString());
-
-  if (error) {
-    console.error("could not count today's passes", error);
-    throw new HttpError("Could not start the rewrites. Please try again.", 500);
-  }
-  if ((count ?? 0) >= MAX_PASSES_PER_DAY) {
-    throw new HttpError(
-      `You have used all ${MAX_PASSES_PER_DAY} rewrite passes for today. The limit resets at midnight UTC.`,
-      429,
-    );
-  }
 }
 
 // -------------------------------------------------------------- model call

@@ -21,6 +21,7 @@ import {
   type Environment,
   type ModelResult,
 } from "../_shared/model.ts";
+import { assertUnderAllowance, spendAllowance } from "../_shared/quota.ts";
 import { buildAnalysisPrompt } from "../_shared/prompt.ts";
 import { analysisSchema, type ResumeAnalysis } from "../_shared/schema.ts";
 import { AnalysisFormatError, normalizeAnalysis } from "../_shared/validate.ts";
@@ -46,12 +47,11 @@ import { AnalysisFormatError, normalizeAnalysis } from "../_shared/validate.ts";
 
 // ------------------------------------------------------------------- guards
 
-/**
- * Per user, per UTC day, counted over `resume_reports`. A candidate iterating
- * on one resume needs a handful of runs in an evening; ten is comfortably above
- * that and still bounds a runaway client to a few dollars a day.
- */
-const MAX_ANALYSES_PER_DAY = 10;
+// The per-user allowance lives in `_shared/plans.ts` and is counted over the
+// `ai_usage` ledger by `_shared/quota.ts`. It used to be a constant here, ten a
+// day, counted over `resume_reports` — see the note on `spendAllowance` for why
+// counting saved reports stopped being adequate once the free tier became one a
+// month.
 
 /** Page ceiling. A resume this long is a different document. */
 const MAX_PAGES = 15;
@@ -199,7 +199,7 @@ async function analyze(req: Request): Promise<Response> {
   // wrong with the file, and the user may analyze it tomorrow.
   await assertNotAlreadyAnalyzed(client, resume.id, force);
   assertNotAlreadyRunning(resume);
-  await assertUnderDailyCap(client, user.id);
+  await assertUnderAllowance(client, user.id, "resume_analysis");
 
   let bytes: Uint8Array;
   let pageCount: number | null;
@@ -215,6 +215,16 @@ async function analyze(req: Request): Promise<Response> {
   }
 
   await setStatus(client, resume.id, "analyzing", pageCount);
+
+  // The allowance is spent here, at the last point where refusing is still free
+  // and still expressible: everything above can decline without a model call,
+  // and everything below is inside a 200 whose status can no longer be changed.
+  //
+  // After `setStatus` rather than before, because the two failure modes are not
+  // equally bad. Spending first and failing to lock would take a monthly
+  // allowance for a run that never happened; locking first and failing to spend
+  // costs the user a three-minute wait and nothing else.
+  await spendAllowance(client, user.id, "resume_analysis", resume.id);
 
   return streamAnalysis({ client, env, userId: user.id, resume, bytes, pageCount });
 }
@@ -463,31 +473,6 @@ function assertNotAlreadyRunning(resume: ResumeRow): void {
     "This resume is already being analyzed. Give it a moment — the report appears here on its own when it lands.",
     409,
   );
-}
-
-async function assertUnderDailyCap(
-  client: SupabaseClient,
-  userId: string,
-): Promise<void> {
-  const midnightUtc = new Date();
-  midnightUtc.setUTCHours(0, 0, 0, 0);
-
-  const { count, error } = await client
-    .from("resume_reports")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("created_at", midnightUtc.toISOString());
-
-  if (error) {
-    console.error("could not count today's analyses", error);
-    throw new HttpError("Could not start the analysis. Please try again.", 500);
-  }
-  if ((count ?? 0) >= MAX_ANALYSES_PER_DAY) {
-    throw new HttpError(
-      `You have used all ${MAX_ANALYSES_PER_DAY} resume analyses for today. The limit resets at midnight UTC.`,
-      429,
-    );
-  }
 }
 
 async function loadPdf(

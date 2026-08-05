@@ -26,4 +26,9 @@ export const keys = {
    */
   resumeEdits: (userId: string, reportId: string) =>
     ["resumeEdits", userId, reportId] as const,
+  /**
+   * Per feature, because the allowances have different periods and are spent
+   * independently — invalidating an analysis must not refetch the chat counter.
+   */
+  aiUsage: (userId: string, feature: string) => ["aiUsage", userId, feature] as const,
 };

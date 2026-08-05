@@ -13,6 +13,8 @@ import {
   useResumeEdits,
   useSetEditStatus,
 } from "../../data/resumeEdits";
+import { useAiUsage } from "../../data/usage";
+import { AllowanceNote } from "../AllowanceNote";
 import {
   ErrorNote,
   Eyebrow,
@@ -287,6 +289,8 @@ export function ImproveCard({ state }: { state: ImproveState }) {
 
 /** The first press: what it does, what it costs, what it will never do. */
 function Offer({ state }: { state: ImproveState }) {
+  const { exhausted } = useAiUsage("resume_rewrite");
+
   return (
     <>
       <h3 style={css("font-family:'Space Grotesk'; font-size:17px; font-weight:600; margin:0 0 7px;")}>
@@ -314,9 +318,14 @@ function Offer({ state }: { state: ImproveState }) {
         ))}
       </ul>
 
-      <PrimaryButton onClick={() => state.run(false)} disabled={!state.available}>
+      <PrimaryButton
+        onClick={() => state.run(false)}
+        disabled={!state.available || exhausted}
+      >
         Improve my resume
       </PrimaryButton>
+
+      <AllowanceNote feature="resume_rewrite" noun="rewrite pass" />
 
       {state.sample && (
         <div style={css("font-size:12px; color:oklch(0.45 0.09 55); line-height:1.55; margin-top:12px;")}>

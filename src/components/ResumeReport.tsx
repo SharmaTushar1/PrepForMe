@@ -11,8 +11,10 @@ import {
   useResumeReport,
   type AnalysisProgressState,
 } from "../data/resumes";
+import { useAiUsage } from "../data/usage";
 import type { ResumeAnalysis } from "../lib/ai";
 import type { Resume } from "../types";
+import { AllowanceNote } from "./AllowanceNote";
 import { AtsReportView } from "./resume/AtsReportView";
 import { ParsedResumeReview } from "./resume/ParsedResumeReview";
 import {
@@ -234,6 +236,9 @@ function NoReportYet({
   progress: AnalysisProgressState;
 }) {
   const stalled = isAnalysisStale(resume);
+  // Only to grey out the button and explain why. The function refuses a spent
+  // allowance regardless, so this is courtesy rather than the control.
+  const { exhausted } = useAiUsage("resume_analysis");
 
   if (pending || (resume.status === "analyzing" && !stalled)) {
     return (
@@ -282,9 +287,10 @@ function NoReportYet({
             ? "It started but never reported back, and nothing is running now. The file is untouched, so it's safe to start again."
             : "The file is in your account. Running the analysis reads it end to end and produces both the report and the structured parse."}
         </p>
-        <PrimaryButton onClick={onAnalyze} disabled={pending}>
+        <PrimaryButton onClick={onAnalyze} disabled={pending || exhausted}>
           {resume.status === "uploaded" ? "Analyze this resume" : "Try the analysis again"}
         </PrimaryButton>
+        <AllowanceNote feature="resume_analysis" noun="analysis" />
         {!ai.supportsResumeParsing && (
           <div style={css("font-size:12px; color:oklch(0.45 0.09 55); line-height:1.55; margin-top:12px;")}>
             Local mode — this returns a labelled sample rather than reading your file, and nothing

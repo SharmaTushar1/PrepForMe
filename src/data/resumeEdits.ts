@@ -192,7 +192,16 @@ export function useImproveResume() {
       // only asks for the row again.
       queryClient.invalidateQueries({ queryKey: keys.resumeEdits(userId, reportId) });
     },
-    onSettled: () => setProgress(null),
+    onSettled: () => {
+      setProgress(null);
+      // Both paths: the allowance is spent before the model call, so a failure
+      // afterwards has still used one.
+      if (userId) {
+        queryClient.invalidateQueries({
+          queryKey: keys.aiUsage(userId, "resume_rewrite"),
+        });
+      }
+    },
   });
 
   return { ...mutation, progress };

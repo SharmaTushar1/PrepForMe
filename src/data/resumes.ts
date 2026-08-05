@@ -281,7 +281,18 @@ export function useAnalyzeResume() {
       if (!userId) return;
       queryClient.invalidateQueries({ queryKey: keys.resume(userId, resumeId) });
     },
-    onSettled: () => setProgress(null),
+    onSettled: () => {
+      setProgress(null);
+      // On both paths, not just success: the allowance is spent immediately
+      // before the model call, so a run that failed afterwards has still been
+      // charged and still used one. Refetching only on success would leave the
+      // screen offering an analysis the server will now refuse.
+      if (userId) {
+        queryClient.invalidateQueries({
+          queryKey: keys.aiUsage(userId, "resume_analysis"),
+        });
+      }
+    },
   });
 
   // Carried alongside the mutation rather than inside it: react-query owns the

@@ -85,7 +85,7 @@ Done: Edge Function provider · resume parsing · resume rewriting · spend cap 
 ### Phase 4 — Convenience & reach (P2, post-MVP scaling)
 - **Job discovery** — pull roles from Greenhouse/Lever/Ashby public JSON + Adzuna; semantically rank against the profile.
 - **Speed alerts** — notify when a role posts at a target company (fresh applications get seen more).
-- **Activate the user's own network** — surface known contacts at a company, draft a strong referral ask (user sends from their own account). Wire `referral_contacts`.
+- **Activate the user's own network** — surface known contacts at a company, draft a strong referral ask (user sends from their own account). Wire `referral_contacts`. **Prerequisite:** normalization layer ([PROJECT.md §16](PROJECT.md#16-normalization-backlog-planned-not-started)) — level equivalence (Mid ≈ L3), strip `(FTC)`-style noise from titles, LinkedIn search filtered to *current* employer not keyword-in-bio; today's link is raw `keywords=<company> <role>`.
 - **Browser extension** — autofill in the user's own session; human reviews and submits (Plasmo / Manifest V3).
 
 ### Phase 5 — Premium & moat-deepening (P3, monetization + scale)

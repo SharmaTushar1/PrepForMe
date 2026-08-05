@@ -10,6 +10,7 @@ import {
 import {
   ANTHROPIC_VERSION,
   HttpError,
+  outputConfig,
   readEnvironment,
   readModelStream,
   upstreamMessage,
@@ -444,10 +445,10 @@ async function requestImprovement(
           ],
         },
       ],
-      output_config: {
-        effort: env.effort,
-        format: { type: "json_schema", schema: improvementSchema },
-      },
+      output_config: outputConfig(env.model, env.effort, {
+        type: "json_schema",
+        schema: improvementSchema,
+      }),
     }),
   });
 

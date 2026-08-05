@@ -23,7 +23,11 @@ export type Plan = "free" | "pro";
  * are data: renaming one orphans the history it was counting and silently
  * refills every user's allowance.
  */
-export type Feature = "resume_analysis" | "resume_rewrite" | "chat";
+export type Feature =
+  | "resume_analysis"
+  | "resume_rewrite"
+  | "chat"
+  | "relevance_check";
 
 /** How an allowance is measured out. Both reset in UTC, matching the database. */
 export type Period = "day" | "month";
@@ -45,12 +49,16 @@ export interface Allowance {
  *
  * Chat is per day because it is conversational — a monthly number would be spent
  * in one sitting and the feature would appear broken for four weeks.
+ *
+ * Relevance checks are three free soft-warns per month when a source looks
+ * off-topic for the company/role; after that they spend the chat allowance.
  */
 export const PLAN_ALLOWANCES: Record<Plan, Record<Feature, Allowance>> = {
   free: {
     resume_analysis: { limit: 1, period: "month" },
     resume_rewrite: { limit: 1, period: "month" },
     chat: { limit: 5, period: "day" },
+    relevance_check: { limit: 3, period: "month" },
   },
   pro: {
     // Not "unlimited". Pro is a paying user, not a blank cheque, and these are
@@ -59,6 +67,7 @@ export const PLAN_ALLOWANCES: Record<Plan, Record<Feature, Allowance>> = {
     resume_analysis: { limit: 30, period: "month" },
     resume_rewrite: { limit: 60, period: "month" },
     chat: { limit: 100, period: "day" },
+    relevance_check: { limit: 3, period: "month" },
   },
 };
 

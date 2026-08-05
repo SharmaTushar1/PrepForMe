@@ -78,6 +78,7 @@ export interface ApplicationRow {
   level: string | null;
   stage: Stage;
   posting_url: string | null;
+  company_domain: string | null;
   job_description: string | null;
   next_action: string | null;
   next_action_at: string | null;
@@ -120,9 +121,14 @@ export interface PrepSourceRow {
   id: string;
   application_id: string;
   kind: PrepSourceKind;
+  input_kind: "url" | "pdf" | "paste";
+  scope: "company" | "role";
   url: string | null;
   title: string | null;
+  storage_path: string | null;
+  paste_body: string | null;
   status: "pending" | "indexed" | "failed";
+  error: string | null;
   created_at: string;
 }
 

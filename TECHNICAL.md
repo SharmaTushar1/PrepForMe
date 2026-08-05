@@ -4,7 +4,7 @@
 [PROJECT.md](PROJECT.md), which holds strategy, scope, and decisions. Update this file
 whenever the stack, schema, hosting, or environment changes.*
 
-**Last updated:** 4 Aug 2026
+**Last updated:** 5 Aug 2026
 
 ---
 
@@ -18,11 +18,11 @@ whenever the stack, schema, hosting, or environment changes.*
 | Server state | TanStack Query 5 |
 | Backend | Supabase — Postgres, PostgREST Data API, GoTrue auth, Storage, Edge Functions |
 | Auth | Magic link (email OTP), no passwords |
-| Files | One private Storage bucket, `resumes`, holding base-resume PDFs — see §6 |
+| Files | Private Storage buckets `resumes` and `prep-sources` — see §6 |
 | Styling | No UI framework. Inline style strings parsed by [`src/css.ts`](src/css.ts), plus a small [`src/index.css`](src/index.css) for form-control resets |
 | Documents | DOCX and PDF written by hand in the browser, no library, no server — see §11 |
 | Hosting | Vercel (static) + Supabase (managed Postgres, Storage, Deno functions) |
-| AI | One Edge Function calling Anthropic Claude, off unless an environment asks for it. The default provider is local and spends nothing; local dev has asked for the real one — see §4 and §8 |
+| AI | Edge Functions for resume analysis/rewrite and company prep (ingest, chat, save claims). Embeddings via OpenAI `text-embedding-3-small`. Default client provider is mock unless `VITE_AI_PROVIDER=edge` — see §4 and §8 |
 
 There is no test suite, no CI, and no linter — no `lint` script, no ESLint
 dependency, no config. `npm run build` runs `tsc --noEmit && vite build`, so type
@@ -91,7 +91,8 @@ ones there or TypeScript won't know them.
 | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | `sk-ant-…` | `supabase/.env.local` locally, Supabase project secrets when deployed |
 | `ANTHROPIC_MODEL` | optional override; defaults to `claude-sonnet-5` | same |
-| `ANTHROPIC_EFFORT` | optional; `low`\|`medium`\|`high`\|`xhigh`\|`max`, defaults to `medium`. An unrecognised value is logged and ignored rather than passed through to a 400 | same |
+| `ANTHROPIC_EFFORT` | optional; `low`\|`medium`\|`high`\|`xhigh`\|`max`, defaults to `medium`. An unrecognised value is logged and ignored rather than passed through to a 400. Dropped entirely for models that reject it — see §10 | same |
+| `ANTHROPIC_EXTRACT_MODEL`, `ANTHROPIC_CHAT_MODEL` | optional; both default to `claude-haiku-4-5-20251001`. Claim extraction, relevance checks, PDF text extraction and prep chat, none of which need Sonnet | same |
 | `ANTHROPIC_BASE_URL` | optional; defaults to `https://api.anthropic.com`. Points the analyzer at [the stub](#the-analyze-resume-edge-function) or an egress proxy | same |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | injected by the functions runtime | nowhere — they arrive on their own |
 
@@ -241,6 +242,17 @@ screened and then rejected still counts as a response. The client only reads it;
 product), `prep_sources`, `prep_messages` (with a `citations` jsonb column so provenance
 is always displayable).
 
+`prep_sources.scope` is `company` or `role`, and it means more than a label: a
+company-scope source stores its claims with `role`/`level` null, which
+`match_prep_chunks` matches against every role at that company. So the source list a role
+shows is its own rows **plus** every company-scope row from a sibling role — assembled in
+`usePrepSources`, which takes the company name for that reason and filters client-side
+because the match strips legal suffixes and cannot be expressed as a PostgREST filter.
+`useApplications` applies the same rule to `sourceCount` in one pass over the rows it
+already has. Inherited rows carry another role's `application_id`, which is what the UI
+keys "company-wide" and the absent delete button off. See §10 for why a count that
+disagrees with retrieval is a bug in the count.
+
 **The base resume** — `resumes`, one row per uploaded PDF, holding the storage path,
 the file's own metadata, a `page_count` the analyzer fills in, and a `status` of
 `uploaded | analyzing | analyzed | failed` with the user-facing `error` beside it.
@@ -318,9 +330,9 @@ Files in [`supabase/migrations/`](supabase/migrations), applied in filename orde
 | `0004_resumes.sql` | `resumes` bucket and its four storage policies, `resumes` and `resume_reports`, `profiles.base_resume_id`, RLS, grants |
 | `0005_resume_edits.sql` | `resume_improvements` and `resume_edits`, RLS, grants, `updated_at` triggers |
 | `0006_ai_quota.sql` | `ai_usage` attempts ledger, and narrowed `user_settings` grants so `plan` is not self-service |
+| `0007_prep_corpus.sql` | `vector` extension, `applications.company_domain`, `prep_chunks` + HNSW + `match_prep_chunks`, `prep-sources` bucket, prep_sources scope/input columns, `relevance_check` on `ai_usage` |
 
-`0001`–`0005` are applied to the hosted project. `0006` is applied locally; the hosted half
-is pending.
+`0001`–`0007` are applied to the hosted project (history repaired 5 Aug so `db push` could land `0007`). Local and hosted both have `prep_chunks`, the `prep-sources` bucket, and `relevance_check` on `ai_usage`.
 
 **The hosted ledger is not to be trusted, and this has already bitten.** Several migrations
 were applied there by hand — SQL Editor and the Management API — so
@@ -334,9 +346,7 @@ but not as a row, so `migration up` tried to recreate `resume_improvements` and 
 42P07. `supabase migration repair --status applied 0005 --local` fixed it, and `0006` then
 applied normally. If a local `migration up` fails on "already exists", this is why.
 
-Note that the corpus migration described in [BUILD_PLAN.md](BUILD_PLAN.md) is now
-`0007`. It was planned as `0004`; the resume and quota work have taken three numbers ahead
-of it.
+Note that the corpus migration is **`0007`** and is now written — claim-based RAG, not verbatim chunks. See [PHASE3_SPEC.md](PHASE3_SPEC.md) for the original sketch; product decisions on 5 Aug supersede verbatim storage and deferred promotion.
 
 **Treat an applied migration as immutable.** Editing `0001` changes nothing in a database
 that already ran it. Every change is a new numbered file — which is exactly why the
@@ -393,12 +403,26 @@ nothing rather than quietly billing a dev machine.
   returns a fixture flagged `sample: true`. Every screen keys its
   "Sample output — local mode, no model was called" banner off that flag rather than
   off which provider is wired up, and a sample is never written to `resume_reports`.
-- **`edge.ts`** implements `analyzeResume` and `improveResume` against the Edge Functions
-  and delegates everything else to the mock, method by method rather than by spreading
-  it — so adding a capability to `AiProvider` fails to compile until someone decides
-  which side of the seam it belongs on.
+- **`edge.ts`** implements `analyzeResume`, `improveResume`, and `answerPrepQuestion`
+  against Edge Functions. Everything else still delegates to the mock, method by method
+  rather than by spreading it — so adding a capability to `AiProvider` fails to compile
+  until someone decides which side of the seam it belongs on.
 
-### The `analyze-resume` Edge Function
+### The `prep-chat` Edge Function
+
+Grounded company-prep answers over `prep_chunks`. Each turn:
+
+1. Embeds the current question (`text-embedding-3-small`).
+2. Calls `match_prep_chunks` (similarity ≥ 0.25; soft retry at 0 if empty).
+3. Sends up to **8 prior turns** of chat history plus a final user message that includes
+   the retrieved claims for *this* turn only.
+4. Returns structured JSON `{ answer, suggestedClaims }` — Save-to-prep suggestions come
+   from the exchange (including “save it, it was in an interview”), not a dump of
+   retrieved rows. Citations are deduped by `sourceUrl` / label and carry `sourceUrl` for
+   clickable pills in the UI.
+
+Company-specific facts must come from claims; labeled general coaching is allowed when
+claims don't cover the question. Never invent company-specific loop details.
 
 One press, one Claude call, both halves of the answer: the ATS report and the
 structured parse come back together so the PDF's page tokens are paid for once.
@@ -813,6 +837,51 @@ Things that have already cost time, or will.
 - **A hard refresh on a nested route 404s** without the SPA rewrite. Vercel's Vite preset
   does not reliably add one; `vercel.json` is explicit for that reason.
 - **`src/data.ts` and `src/data/` are different things.** Constants versus hooks.
+- **A count of sources is not a count of grounding, and showing the former as the latter
+  reads as a bug.** Two Google roles, same sidebar component: one said "1 source", the
+  other "0 sources · Cold start" while its chat answered Google questions in detail and
+  cited them. Nothing was broken — `sourceCount` counted `prep_sources` rows on *this*
+  `application_id`, while `match_prep_chunks` matches any claim whose `company`/`role` is
+  null or equal, so a role draws on (a) company-scope sources added under a sibling role
+  and (b) shared claims (`prep_chunks.user_id is null`) contributed by **other accounts**,
+  whose `prep_sources` row RLS correctly hides forever. So the panel now counts all three,
+  labels inherited rows `company-wide` and offers no delete on them, and reports shared
+  claims as a count rather than naming someone else's upload. **Any new count beside the
+  chat has to mirror the retrieval predicate** — a filter added to `match_prep_chunks` and
+  not to `useSharedClaimCount` starts overstating grounding immediately.
+- **`normaliseCompany` exists twice on purpose, and the copies must not drift.**
+  [`src/lib/company.ts`](src/lib/company.ts) and
+  [`_shared/claims.ts`](supabase/functions/_shared/claims.ts) hold the same function
+  because one is bundled by Vite and the other runs in Deno; neither can import the other.
+  The server copy decides `prep_chunks.company`, the client copy decides which roles are
+  siblings, so a divergence silently means the UI counts a source retrieval won't use, or
+  hides one it will. `"Google Inc."`, `"GOOGLE, LLC"` and `"Google"` must all reduce to
+  `google` on both sides — checked by running the same inputs through each.
+- **Referrals LinkedIn search is naive today — see PROJECT.md §16 before "fixing" it
+  inline.** [`ReferralsTab.tsx`](src/components/detail/ReferralsTab.tsx) builds
+  `keywords=<company> <role>` with the raw application strings and a 2nd-degree network
+  filter only. That matches the company name anywhere in a profile, not current employment,
+  and sends parenthetical posting noise (`Recruitment Coordinator (FTC)`) verbatim. A
+  shared normalizer (level equivalence, title cleanup, company-scoped search URL) is
+  planned; do not add ad-hoc `.replace()` calls in the component.
+- **`JWT issued at future` (`PGRST303`) on every local query is a stale container, not an
+  auth bug.** After the Mac sleeps, the Docker VM clock jumps on resume and PostgREST's
+  cached time can stay behind it, so it reads perfectly good tokens as coming from the
+  future. Two things make this misleading: the message points at the token, and signing
+  out and back in does not help, because the next token is just as "future" to a clock
+  that is an hour behind. The tell is that a token minted **thirty seconds ago** is
+  rejected too — if backdating the `iat` doesn't help, the verifier's clock is the
+  problem. `supabase_rest_…` also loses its `(healthy)` marker in `docker ps` and stops
+  writing logs. Fix is one container, not the stack:
+
+  ```bash
+  docker restart supabase_rest_PrepForMe
+  ```
+
+  Same family as the wedged Kong that presented as "the Profile page loads forever": when
+  something local breaks everywhere at once after the laptop slept, suspect a container
+  before the code. Comparing `date -u` on the host against `docker exec … date -u` costs
+  a second and settles it.
 - **The functions runtime injects `SUPABASE_ANON_KEY`, not `SUPABASE_PUBLISHABLE_KEY`.**
   Verified against the local runtime container on CLI 2.111.0: what it provides is
   `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and
@@ -830,6 +899,23 @@ Things that have already cost time, or will.
   because structured output cut off mid-JSON is not JSON. Symptom in this app: the
   analysis "ran past its length limit". Remedy: raise `max_tokens`, or drop the effort
   level so less of it goes on thinking.
+- **`output_config.effort` is not universal, and switching `ANTHROPIC_MODEL` can break
+  every model call at once.** Haiku 4.5 rejects `effort` outright — `400
+  invalid_request_error: "This model does not support the effort parameter."` — while
+  still accepting the `format` half of the same `output_config`. Sonnet 5 takes both.
+  Setting `ANTHROPIC_MODEL=claude-haiku-4-5-20251001` to save money therefore took out
+  résumé analysis, rewrites, prep chat, and claim extraction simultaneously, all
+  presenting as "the model service could not process this request" with no bill to show
+  for it (a 400 is refused before tokens are counted). Build `output_config` through
+  `outputConfig(model, effort, format?)` in `_shared/model.ts`, which drops `effort` for
+  models that refuse it, rather than writing the object inline. `supportsEffort` matches
+  on model name and treats anything unrecognised as unsupported: guessing wrong that way
+  costs a chattier answer, guessing wrong the other way costs the whole call.
+- **Log the upstream body, not just the status.** `console.error("…failed", res.status)`
+  reads as diagnostic and isn't: `400` alone sent the next session to `curl` to rediscover
+  a message Anthropic had already spelled out by name. `logUpstreamFailure` in
+  `_shared/model.ts` prints the first 500 characters of the body; use it for every
+  non-`ok` model or embedding response.
 - **`early termination has been triggered` is usually not your request dying.** Under
   the local `edge_runtime` policy `per_worker` (the default, and what gives hot reload)
   one worker serves many requests and is reaped about 200 seconds after it *starts*. So
@@ -969,11 +1055,9 @@ every structural check, and rendered as an almost blank page.
 ## 12. Not wired yet
 
 Discover's job-feed queries, the browser extension, Practice, drag-and-drop on the
-kanban board, and the four tables listed in §6. Each of these says so on screen rather
-than pretending. The scoped-retrieval infrastructure the product depends on — pgvector,
-embeddings, the `(company, role, level, interview-type)` content key with provenance and
-corroboration count — does not exist in the schema yet; see §13 of
-[PROJECT.md](PROJECT.md).
+kanban board. Each of these says so on screen rather than pretending. The scoped
+retrieval infrastructure — pgvector, `prep_chunks`, `match_prep_chunks` — landed in
+migration `0007`; see §8 (`prep-chat`) and [PROJECT.md](PROJECT.md) §13.
 
 Resume upload has moved off this list, with one caveat worth stating plainly: the
 analyzer has run for real (§8), but **the rewrite pass has only ever run against the
@@ -987,7 +1071,7 @@ if a model produced it — which also means a sample lives in the React Query ca
 nowhere else, and a page reload loses it. Sample rewrites behave the same way, for the
 same reason, so accept and dismiss work in local mode but do not survive a refresh.
 
-`tailorResume`, `atsGap`, `draftReferralNote`, `suggestReferrals` and
-`answerPrepQuestion` are still local in both providers — `edge.ts` delegates them to
-the mock deliberately, and each result carries its own `model` label so no screen ever
-claims a model was called when one wasn't.
+`tailorResume`, `atsGap`, `draftReferralNote` and `suggestReferrals` are still local in
+both providers — `edge.ts` delegates them to the mock deliberately, and each result
+carries its own `model` label so no screen ever claims a model was called when one
+wasn't. `answerPrepQuestion` is wired to `prep-chat` when `VITE_AI_PROVIDER=edge`.

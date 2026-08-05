@@ -15,6 +15,7 @@ import {
 import {
   ANTHROPIC_VERSION,
   HttpError,
+  outputConfig,
   readEnvironment,
   readModelResponse,
   upstreamMessage,
@@ -608,11 +609,12 @@ async function callModel(
       ],
       // `effort` and `format` are both `output_config`. Generally available — no
       // `anthropic-beta` header, and no `output_format`, which is the older beta
-      // spelling of the format half.
-      output_config: {
-        effort: env.effort,
-        format: { type: "json_schema", schema: analysisSchema },
-      },
+      // spelling of the format half. `effort` is dropped for models that refuse
+      // it (Haiku), which is why this is assembled rather than written inline.
+      output_config: outputConfig(env.model, env.effort, {
+        type: "json_schema",
+        schema: analysisSchema,
+      }),
     }),
   });
 

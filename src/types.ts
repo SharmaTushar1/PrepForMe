@@ -25,6 +25,8 @@ export interface Application {
   level: string | null;
   stage: Stage;
   postingUrl: string | null;
+  /** Confirmed domain for first-party URL detection, e.g. abnormal.ai */
+  companyDomain: string | null;
   jobDescription: string | null;
   nextAction: string | null;
   nextActionAt: string | null;
@@ -32,7 +34,10 @@ export interface Application {
   resumeTailored: boolean;
   createdAt: string;
   updatedAt: string;
-  /** Rows in `prep_sources` for this role. */
+  /**
+   * Sources behind this role: its own `prep_sources` rows plus company-scope
+   * ones from sibling roles at the same company, which ground its answers too.
+   */
   sourceCount: number;
   /** Rows in `recaps` for this role. */
   recapCount: number;
@@ -44,6 +49,7 @@ export interface ApplicationDraft {
   level?: string | null;
   stage?: Stage;
   postingUrl?: string | null;
+  companyDomain?: string | null;
   jobDescription?: string | null;
   nextAction?: string | null;
   nextActionAt?: string | null;
@@ -140,15 +146,27 @@ export interface PrepSource {
   id: string;
   applicationId: string;
   kind: "company_blog" | "careers" | "docs" | "news" | "custom";
+  inputKind: "url" | "pdf" | "paste";
+  scope: "company" | "role";
   url: string | null;
   title: string | null;
   status: "pending" | "indexed" | "failed";
+  error: string | null;
   createdAt: string;
 }
 
 export interface PrepCitation {
   label: string;
   layer: "company" | "role" | "personal" | "general";
+  provenance?: string;
+  claimKind?: string;
+  sourceUrl?: string | null;
+}
+
+export interface PrepClaimDraft {
+  content: string;
+  claimKind: "company_fact" | "interview_process";
+  provenance: "candidate_report" | "ai_inferred";
 }
 
 export interface PrepMessage {

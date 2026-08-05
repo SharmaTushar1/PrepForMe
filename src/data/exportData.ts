@@ -14,6 +14,7 @@ const TABLES = [
   "recaps",
   "prep_sources",
   "prep_messages",
+  "prep_chunks",
   "referral_contacts",
   "tailorings",
 ] as const;
@@ -59,6 +60,9 @@ export function useClearCorpus() {
     mutationFn: async (applicationId: string) => {
       await unwrap<null>(
         supabase.from("prep_messages").delete().eq("application_id", applicationId),
+      );
+      await unwrap<null>(
+        supabase.from("prep_chunks").delete().eq("application_id", applicationId),
       );
       await unwrap<null>(
         supabase.from("prep_sources").delete().eq("application_id", applicationId),

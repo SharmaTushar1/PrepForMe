@@ -160,6 +160,8 @@ function label(feature: Feature): string {
       return "resume rewrite";
     case "chat":
       return "chat";
+    case "relevance_check":
+      return "relevance check";
   }
 }
 

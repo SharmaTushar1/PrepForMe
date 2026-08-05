@@ -41,6 +41,14 @@ export interface ReferralDraft {
 export interface PrepAnswer {
   content: string;
   citations: PrepCitation[];
+  /** Optional claims the user can tick and Save to prep — from this exchange. */
+  suggestedClaims?: {
+    content: string;
+    claimKind: "company_fact" | "interview_process";
+    provenance?: string;
+    /** Pre-tick “from my experience” when the user affirmed a lived interview. */
+    fromExperience?: boolean;
+  }[];
 }
 
 // ------------------------------------------------------ base resume review
@@ -356,6 +364,11 @@ export interface PrepQuestionInput {
   context: ProfileContext;
   recaps: Recap[];
   sourceCount: number;
+  /**
+   * Prior turns already shown in the UI (newest last), excluding the question
+   * about to be asked. The edge function caps at 8 and normalises roles.
+   */
+  history?: { role: "user" | "assistant"; content: string }[];
 }
 
 /**

@@ -6,6 +6,7 @@ import type {
   AnalyzeResumeOptions,
   ImproveResumeOptions,
   ParsedResume,
+  PrepAnswer,
   ResumeAnalysis,
   ResumeEdit,
   ResumeImprovement,
@@ -14,11 +15,10 @@ import type {
 /**
  * The hosted provider, selected by `VITE_AI_PROVIDER=edge`.
  *
- * Two Edge Functions so far: the resume analysis, and the rewrite pass over the
- * report it produced. Everything else delegates to the local implementation on
- * purpose, and each of those results carries its own `model` label, so nothing
- * here claims a model was called when one wasn't. Delegation is written out
- * method by method rather than spread from the mock, so adding a capability to
+ * Resume: `analyze-resume`, `improve-resume`. Prep: `prep-chat` (multi-turn —
+ * client sends recent history; claims are re-retrieved each turn), plus ingest /
+ * save via `src/data/prep.ts`. Remaining surfaces still delegate to the mock,
+ * method by method rather than by spreading, so adding a capability to
  * `AiProvider` fails to compile until someone decides which side of the seam it
  * belongs on.
  *
@@ -57,7 +57,51 @@ export const edgeAiProvider: AiProvider = {
   atsGap: (input) => mockAiProvider.atsGap(input),
   draftReferralNote: (input) => mockAiProvider.draftReferralNote(input),
   suggestReferrals: (input) => mockAiProvider.suggestReferrals(input),
-  answerPrepQuestion: (input) => mockAiProvider.answerPrepQuestion(input),
+  answerPrepQuestion: async (input) => {
+    const response = await fetch(`${functionsUrl}/prep-chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        apikey: supabaseKey,
+        Authorization: `Bearer ${await accessToken()}`,
+      },
+      body: JSON.stringify({
+        applicationId: input.application.id,
+        question: input.question,
+        history: (input.history ?? []).slice(-8).map((turn) => ({
+          role: turn.role,
+          content: turn.content,
+        })),
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await refusalMessage(response, "prep chat"));
+    }
+
+    const payload = (await response.json()) as {
+      content?: string;
+      citations?: unknown;
+      suggestedClaims?: {
+        content: string;
+        claimKind: "company_fact" | "interview_process";
+        provenance?: string;
+        fromExperience?: boolean;
+      }[];
+    };
+
+    if (typeof payload.content !== "string" || payload.content === "") {
+      throw new Error("The prep answer came back empty.");
+    }
+
+    return {
+      content: payload.content,
+      citations: Array.isArray(payload.citations)
+        ? (payload.citations as PrepAnswer["citations"])
+        : [],
+      suggestedClaims: payload.suggestedClaims,
+    };
+  },
 
   async analyzeResume(
     resumeId: string,

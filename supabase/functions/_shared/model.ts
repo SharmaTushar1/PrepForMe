@@ -21,7 +21,7 @@ export class HttpError extends Error {
 
 export const ANTHROPIC_VERSION = "2023-06-01";
 
-const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_ANTHROPIC_BASE = "https://api.anthropic.com";
 
 /**
@@ -145,6 +145,61 @@ export function upstreamMessage(status: number): string {
     return "The model service could not process this request. Nothing was charged for it — please report this if it keeps happening.";
   }
   return "The model service returned an error. Please try again.";
+}
+
+/**
+ * Whether a model accepts `output_config.effort`.
+ *
+ * It is not a universal parameter and the failure is a flat 400 —
+ * `"This model does not support the effort parameter."` — before any tokens are
+ * billed. Sonnet 5 takes it; Haiku 4.5 rejects it while still accepting the
+ * `format` half of the same object, which is why the two are assembled
+ * separately rather than passed through as one literal.
+ *
+ * Name-matched rather than probed because the request has to be built before it
+ * can be sent. A model this doesn't recognise is assumed *not* to support it:
+ * the cost of guessing wrong that way is a slightly chattier answer, and the
+ * cost of guessing wrong the other way is the whole call failing.
+ */
+export function supportsEffort(model: string): boolean {
+  return /sonnet-5|sonnet-6|opus-5|opus-4-[5-9]/.test(model);
+}
+
+/**
+ * The `output_config` for a request, with `effort` included only where it is
+ * accepted. Returns undefined when there is nothing to send, so the key can be
+ * omitted entirely rather than sent as an empty object.
+ */
+export function outputConfig(
+  model: string,
+  effort: string,
+  format?: unknown,
+): Record<string, unknown> | undefined {
+  const config: Record<string, unknown> = {};
+  if (supportsEffort(model)) config.effort = effort;
+  if (format !== undefined) config.format = format;
+  return Object.keys(config).length > 0 ? config : undefined;
+}
+
+/**
+ * Log an upstream failure with its body, not just its status.
+ *
+ * A bare status sends the next reader to `curl` to find out what Anthropic
+ * actually objected to — which is exactly what the missing body cost when
+ * `effort` started being refused. Anthropic's errors are short and name the
+ * offending parameter, so they are worth the log line.
+ */
+export async function logUpstreamFailure(
+  label: string,
+  response: Response,
+): Promise<void> {
+  let detail = "";
+  try {
+    detail = (await response.text()).slice(0, 500);
+  } catch {
+    detail = "(body unreadable)";
+  }
+  console.error(`${label} failed ${response.status}: ${detail}`);
 }
 
 // ------------------------------------------------------------------ streaming

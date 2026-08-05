@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../store";
 import { css } from "../css";
 import { ALL_STAGES } from "../data";
-import { useCreateApplication, useUpdateApplication } from "../data/applications";
+import { useCreateApplication, useUpdateApplication, guessCompanyDomain } from "../data/applications";
 import { ROUTES } from "../routes";
 import type { Application, Stage } from "../types";
 import {
@@ -46,6 +46,9 @@ export function RoleDialog({ application, onClose }: Props) {
   const [level, setLevel] = useState(application?.level ?? "");
   const [stage, setStage] = useState<Stage>(application?.stage ?? "Saved");
   const [postingUrl, setPostingUrl] = useState(application?.postingUrl ?? "");
+  const [companyDomain, setCompanyDomain] = useState(
+    application?.companyDomain ?? guessCompanyDomain(application?.postingUrl) ?? "",
+  );
   const [jobDescription, setJobDescription] = useState(application?.jobDescription ?? "");
   const [nextAction, setNextAction] = useState(application?.nextAction ?? "");
   const [nextActionAt, setNextActionAt] = useState(toLocalInput(application?.nextActionAt ?? null));
@@ -63,6 +66,7 @@ export function RoleDialog({ application, onClose }: Props) {
       level,
       stage,
       postingUrl,
+      companyDomain: companyDomain.trim() || guessCompanyDomain(postingUrl),
       jobDescription,
       nextAction,
       nextActionAt: nextActionAt ? new Date(nextActionAt).toISOString() : null,
@@ -121,7 +125,29 @@ export function RoleDialog({ application, onClose }: Props) {
 
         <div>
           <FieldLabel hint="(optional)">Posting link</FieldLabel>
-          <TextInput type="url" value={postingUrl} onChange={setPostingUrl} placeholder="https://…" />
+          <TextInput
+            type="url"
+            value={postingUrl}
+            onChange={(v) => {
+              setPostingUrl(v);
+              if (!companyDomain.trim()) {
+                const guessed = guessCompanyDomain(v);
+                if (guessed) setCompanyDomain(guessed);
+              }
+            }}
+            placeholder="https://…"
+          />
+        </div>
+
+        <div>
+          <FieldLabel hint="— used to tell the company's own site from third-party pages">
+            Company domain
+          </FieldLabel>
+          <TextInput
+            value={companyDomain}
+            onChange={setCompanyDomain}
+            placeholder="abnormal.ai"
+          />
         </div>
 
         <div>

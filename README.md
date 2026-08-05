@@ -56,6 +56,52 @@ npm run preview    # preview the production build
 npm run typecheck  # tsc --noEmit
 ```
 
+### Resume analysis locally (Anthropic vs free stub)
+
+`supabase start` brings up Postgres, Auth, and Storage — it does **not** put your
+`ANTHROPIC_API_KEY` into the Edge Function runtime. You need a separate
+`supabase functions serve` process, and the key must live in a file that process reads
+(`supabase/.env.local` or `supabase/.env.stub`), **not** in `.env.development.local`
+or any `VITE_` variable (those are for the browser / Vite only).
+
+Also set `VITE_AI_PROVIDER=edge` in `.env.development.local` so `npm run dev` calls the
+function instead of the labelled sample provider. Restart Vite after changing it.
+
+**Real Anthropic (bills the key — ~$0.09–0.10 per analysis):**
+
+1. Put the key in `supabase/.env.local`:
+   ```bash
+   ANTHROPIC_API_KEY=sk-ant-…
+   ```
+2. With the local stack already running (`supabase start`), serve the functions:
+   ```bash
+   supabase functions serve --env-file supabase/.env.local
+   ```
+3. Leave that terminal open. In another terminal: `npm run dev`, then press
+   **Analyze this resume** (or **Improve my resume**). Each press is an explicit spend.
+
+**Free stub (no Anthropic bill):**
+
+1. Start the local stub that pretends to be Anthropic:
+   ```bash
+   deno run --allow-net --allow-env supabase/functions/_stub/anthropic.ts
+   ```
+2. In another terminal, serve the functions against the stub env (points
+   `ANTHROPIC_BASE_URL` at `host.docker.internal:8787`):
+   ```bash
+   supabase functions serve --env-file supabase/.env.stub
+   ```
+3. Use the app the same way. Responses are fake; nothing is charged at Anthropic.
+
+To switch between real and free: stop the current `functions serve`, start the other
+`--env-file` (and the stub process if you're going free). Only one `functions serve`
+should run at a time — a second one takes over the shared runtime container. Set
+`VITE_AI_PROVIDER` back to `mock` (or delete the line) if you want the in-app sample
+provider with no Edge Function at all.
+
+More detail: [TECHNICAL.md §4](TECHNICAL.md#4-local-development) and the shared-container
+gotcha in [§10](TECHNICAL.md#10-gotchas).
+
 ## Not built yet
 
 Resume upload and parsing, real LLM calls, Discover's job-feed queries, the browser

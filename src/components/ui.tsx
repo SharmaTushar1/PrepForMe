@@ -82,6 +82,11 @@ interface TextAreaProps {
   autoFocus?: boolean;
   style?: CSSProperties;
   ariaLabel?: string;
+  /**
+   * Enter without Shift submits (chat). Shift+Enter keeps the default newline.
+   * Omit for free-form notes where Enter should only insert a line break.
+   */
+  onEnter?: () => void;
 }
 
 export function TextArea({
@@ -94,6 +99,7 @@ export function TextArea({
   autoFocus,
   style,
   ariaLabel,
+  onEnter,
 }: TextAreaProps) {
   return (
     <textarea
@@ -105,6 +111,16 @@ export function TextArea({
       autoFocus={autoFocus}
       aria-label={ariaLabel}
       onChange={(e) => onChange(e.target.value)}
+      onKeyDown={
+        onEnter
+          ? (e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                onEnter();
+              }
+            }
+          : undefined
+      }
       style={style}
     />
   );

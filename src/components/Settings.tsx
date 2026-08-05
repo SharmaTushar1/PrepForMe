@@ -222,7 +222,8 @@ function PlanAllowances() {
 
       <AllowanceRow feature="resume_analysis" label="Resume analysis" />
       <AllowanceRow feature="resume_rewrite" label="Resume rewrites" />
-      <AllowanceRow feature="chat" label="Practice chat" />
+      <AllowanceRow feature="chat" label="Prep chat" />
+      <AllowanceRow feature="relevance_check" label="Source relevance checks" />
 
       <div style={css("font-size:12px; color:oklch(0.5 0.015 260); line-height:1.55; margin-top:10px; padding-top:10px; border-top:1px solid oklch(0.94 0.005 260);")}>
         {/* Said plainly rather than left to be inferred from the padlock in the

@@ -13,6 +13,18 @@ export const keys = {
     ["recaps", userId, applicationId] as const,
   prepSources: (userId: string, applicationId: string) =>
     ["prepSources", userId, applicationId] as const,
+  /**
+   * Prefix for every role's source list. A company-scope source shows up on all
+   * roles at that company, so adding or removing one invalidates its siblings
+   * too — not just the role it was added under.
+   */
+  prepSourcesAll: (userId: string) => ["prepSources", userId] as const,
+  /**
+   * Not namespaced by user: shared claims belong to no one, so two accounts
+   * looking at the same company and role are asking the identical question.
+   */
+  sharedClaims: (company: string, role: string) =>
+    ["sharedClaims", company, role] as const,
   prepMessages: (userId: string, applicationId: string) =>
     ["prepMessages", userId, applicationId] as const,
   resume: (userId: string, resumeId: string) => ["resume", userId, resumeId] as const,

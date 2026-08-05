@@ -730,8 +730,20 @@ supabase functions deploy improve-resume
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
 ```
 
-None of these has been run yet — both functions run only on this machine, under
-`supabase functions serve` (§4). They share one secret, so setting it once covers both.
+Neither deploy has been run — both functions run only on this machine, under
+`supabase functions serve` (§4). **The secret is set on the hosted project**, so that line is
+done; they share it, so setting it once covers both. What this means in practice is that the
+live site can store a resume but cannot analyse one, and `VITE_AI_PROVIDER` is deliberately
+left unset on Vercel so the deployed build uses the sample provider rather than calling a
+function that isn't there.
+
+**Migrations on the hosted project are applied by hand, and the ledger is empty.** `0001`–
+`0003` were pasted into the SQL editor, so `supabase_migrations.schema_migrations` does not
+exist there and `supabase db push` would try to replay them against tables that already
+exist and fail on the first `create table`. `0004` and `0005` were therefore applied the same
+way, through the Management API's query endpoint, on 5 Aug. Either keep doing that, or run
+`supabase migration repair --status applied 0001 0002 0003` once to backfill the ledger and
+switch to `db push` from then on. Both are defensible; mixing them without the repair is not.
 
 Six things a new environment needs:
 
@@ -804,6 +816,21 @@ Things that have already cost time, or will.
   anything, POST an already-analyzed `resumeId` with no `force`: the 409 refusal happens
   after the env is read and before any model call. Run one serve at a time, and restart it
   after stub work rather than just killing the stub.
+- **`name resolution failed` means the function server is down, not that DNS or Anthropic
+  is broken.** With no `supabase functions serve` running there is no `edge_runtime`
+  container for Kong to resolve, so the *gateway* answers
+  `503 {"message":"name resolution failed"}`. It reads like a network fault inside the
+  function — as if it could not reach `api.anthropic.com` — and it is the opposite: the
+  request never got as far as our code, and nothing was billed. Confirm with
+  `docker ps | grep edge_runtime`, then start the server. The message used to reach the
+  UI verbatim because `refusalMessage` in [`src/lib/ai/edge.ts`](src/lib/ai/edge.ts) read
+  `message` as a fallback after `error`; it now trusts only `error`, which is the sole
+  field `errorResponse` ever writes, and maps every other status to its own wording. Same
+  fix covers the deployed case, where an undeployed function 404s and Supabase's
+  worker-limit 546 arrives with no body at all. Note that the *same* stopped server
+  produced a prompt 503 on one attempt and hung until the socket gave up on the next, so
+  status handling alone does not cover it — a hang rejects `fetch`, which has no status to
+  map. Both paths now end in `unreachableMessage`.
 - **Anthropic structured-output schemas have a property budget: 16 union-typed and 24
   optional, per request.** Inlining the finding object across seven categories with
   `evidence` typed `string | null` spent 13 of the 16 before anyone noticed; `evidence`

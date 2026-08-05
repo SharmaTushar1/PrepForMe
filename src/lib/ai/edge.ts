@@ -63,7 +63,7 @@ export const edgeAiProvider: AiProvider = {
     resumeId: string,
     { force = false, onProgress }: AnalyzeResumeOptions = {},
   ): Promise<ResumeAnalysis> {
-    const body = await post("analyze-resume", resumeId, force);
+    const body = await post("analyze-resume", "analysis", resumeId, force);
     return await readEventStream(body, onProgress, {
       noun: "analysis",
       // `analysis` is the whole payload, so anything shaped like an object is
@@ -77,7 +77,7 @@ export const edgeAiProvider: AiProvider = {
     resumeId: string,
     { force = false, onProgress }: ImproveResumeOptions = {},
   ): Promise<ResumeImprovement> {
-    const body = await post("improve-resume", resumeId, force);
+    const body = await post("improve-resume", "rewrites", resumeId, force);
     return await readEventStream(body, onProgress, {
       noun: "rewrites",
       // An empty array is a real answer — "nothing here is worth rewriting" —
@@ -105,10 +105,11 @@ export const edgeAiProvider: AiProvider = {
 /** Both functions take the same request, so they are called the same way. */
 async function post(
   fn: string,
+  noun: string,
   resumeId: string,
   force: boolean,
 ): Promise<ReadableStream<Uint8Array>> {
-  const response = await fetch(`${functionsUrl}/${fn}`, {
+  const request = {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -116,9 +117,21 @@ async function post(
       Authorization: `Bearer ${await accessToken()}`,
     },
     body: JSON.stringify({ resumeId, force }),
-  });
+  };
 
-  if (!response.ok) throw new Error(await refusalMessage(response));
+  let response: Response;
+  try {
+    response = await fetch(`${functionsUrl}/${fn}`, request);
+  } catch {
+    // No status to go on: the browser never got a reply. A stopped function
+    // server reaches the UI both ways — Kong answered a 503 in one attempt and
+    // hung until the socket gave up in the next — so the same absence has to be
+    // described the same way whichever path it takes. `fetch` only rejects on
+    // transport, never on a status, so nothing the server chose to say lands here.
+    throw new Error(unreachableMessage(noun));
+  }
+
+  if (!response.ok) throw new Error(await refusalMessage(response, noun));
   if (!response.body) throw new Error("The server returned an empty response.");
   return response.body;
 }
@@ -133,23 +146,55 @@ async function accessToken(): Promise<string> {
 }
 
 /**
- * A refusal the function wrote for the user, dug out of the body. Falling back
- * to the status keeps the message honest when the body isn't ours — a gateway
- * 401 or 546 never reaches the function at all.
+ * The message to show for a non-2xx, in the user's terms.
+ *
+ * Our own refusals are the only ones worth repeating verbatim, and `errorResponse`
+ * in `functions/_shared/cors.ts` puts every one of them in an `error` field. So
+ * `error` is trusted and nothing else is: a body with only `message` came from
+ * the gateway, which never reached the function and describes its own plumbing.
+ * Kong answers a stopped container with `{"message":"name resolution failed"}`,
+ * which is accurate and tells the user nothing they can act on.
  */
-async function refusalMessage(response: Response): Promise<string> {
+async function refusalMessage(
+  response: Response,
+  noun: string,
+): Promise<string> {
   try {
-    const body = (await response.json()) as { error?: unknown; message?: unknown };
-    for (const field of [body?.error, body?.message]) {
-      if (typeof field === "string" && field !== "") return field;
-    }
+    const body = (await response.json()) as { error?: unknown };
+    if (typeof body?.error === "string" && body.error !== "") return body.error;
   } catch {
-    // Not JSON.
+    // Not JSON, so certainly not ours.
   }
-  if (response.status === 401) {
-    return "Your session has expired. Sign in again and try that once more.";
+
+  switch (response.status) {
+    case 401:
+    case 403:
+      return "Your session has expired. Sign in again and try that once more.";
+    case 404:
+      // The URL is built from the project's own config, so a missing route means
+      // the function was never deployed to whatever environment this is.
+      return `The ${noun} isn't available in this environment yet — the server function hasn't been deployed.`;
+    case 502:
+    case 503:
+    case 504:
+      // 503 is the one a developer hits daily: `supabase functions serve` is not
+      // running, so the gateway cannot resolve the container's hostname.
+      return unreachableMessage(noun);
+    case 546:
+      // Supabase's own status for a worker that exceeded its memory or CPU
+      // budget. It dies without writing a body, so this is the only clue.
+      return `The ${noun} ran out of resources before it finished. Nothing was saved.`;
+    default:
+      return `The ${noun} could not be started (${response.status}).`;
   }
-  return `That could not be started (${response.status}).`;
+}
+
+/** Nothing answered. Said the same way whether that arrived as a status or as no reply at all. */
+function unreachableMessage(noun: string): string {
+  const message = `The ${noun} could not be started: the server isn't reachable. Nothing was charged.`;
+  return import.meta.env.DEV
+    ? `${message} Is \`supabase functions serve\` still running?`
+    : message;
 }
 
 interface DoneReader<T> {

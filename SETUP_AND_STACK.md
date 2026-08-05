@@ -22,13 +22,31 @@
 | Code / VCS | **GitHub** | ✅ Done (`main`, two commits) |
 | Frontend | **Vite + React 18 + TS** | ✅ Done |
 | Hosting | **Vercel** | ✅ Done — deployed at prep-for-me.vercel.app, SPA rewrite in `vercel.json` |
-| DB + Auth + Storage | **Supabase** (Mumbai) | ✅ Done — 16-table schema, RLS, magic-link auth. 3 migrations applied to the hosted project; `0004` applied and checked on the local stack only |
+| DB + Auth + Storage | **Supabase** (Mumbai) | ✅ Done — 18-table schema with RLS on every table, magic-link auth. All 5 migrations now applied to the hosted project (`0004`/`0005` on 5 Aug, after "bucket not found" on the live site), verified equal to local |
 | Vector store | **pgvector** | ⚠️ Available in Supabase but **not enabled/used yet** — no embedding column exists |
-| File storage | **Supabase Storage** | ✅ Done — private `resumes` bucket, 10 MB, PDF only, per-user path policies (`0004`) |
+| File storage | **Supabase Storage** | ✅ Done — private `resumes` bucket, 10 MB, PDF only, per-user path policies (`0004`), on **both** local and hosted; upload/insert/read proven against the live project |
 | Backend / API | **Supabase Edge Functions** | ⚠️ `analyze-resume` works end to end locally — streams progress, returns a real report — but is **not deployed** |
 | Domain | **prepfor.me** | ✅ Owned |
 
 So core infra tiers 1–9 from your old list are essentially **already handled**. The work ahead is turning the AI layer on, then embeddings, then ops.
+
+### Auth redirect URLs live on the hosted project, not in git
+
+`supabase/config.toml` configures **only the local stack**. Its `site_url = "http://localhost:5173"` is correct there and must stay. The hosted project has its own copy of those settings, editable in the dashboard under *Authentication → URL Configuration* or via the Management API, and **nothing in this repo keeps the two in sync.**
+
+That bit us on 5 Aug: the hosted project still carried `site_url = http://localhost:5173` with only localhost allow-listed, so magic links sent from the live site pointed at localhost. The cause is worth understanding, because the client code was never wrong — `Login.tsx` sends `emailRedirectTo: ${window.location.origin}/app`, which on Vercel is the right URL. **GoTrue silently discards an `emailRedirectTo` that isn't on the allow list and falls back to Site URL**, so a missing allow-list entry looks exactly like a hardcoded localhost bug.
+
+The hosted project is now:
+
+```
+site_url       = https://prep-for-me.vercel.app
+uri_allow_list = https://prep-for-me.vercel.app/**,
+                 https://prep-for-me-*.vercel.app/**,   # preview deployments
+                 http://localhost:5173/**,              # vite dev, if ever pointed at hosted
+                 http://localhost:4173/**               # vite preview
+```
+
+Localhost stays on the allow list but is **no longer the fallback**, which is the part that matters: an unrecognised origin now lands on production rather than on a machine that isn't running. Two follow-ons: `supabase config push` would overwrite these with config.toml's localhost values, so **don't run it against this project** without making the URLs environment-aware first; and if a custom domain (`prepfor.me`) is ever pointed at Vercel, both `site_url` and the allow list need it added or the same failure returns.
 
 ## 2. The one change since that old list: Vite, not Next.js
 

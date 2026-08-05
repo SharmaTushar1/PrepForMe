@@ -156,6 +156,11 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
+#
+# LOCAL ONLY. The hosted project keeps its own copy of these two settings and is set to
+# https://prep-for-me.vercel.app — see SETUP_AND_STACK.md §1. Nothing syncs them, so
+# `supabase config push` would overwrite the live redirect URLs with the localhost ones
+# below and send every production magic link to a machine that isn't running.
 site_url = "http://localhost:5173"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""

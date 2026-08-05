@@ -13,7 +13,7 @@ import {
   jsonResponse,
   preflightResponse,
 } from "../_shared/cors.ts";
-import { normaliseCompany, normaliseRole } from "../_shared/claims.ts";
+import { prepKeysFromApplication } from "../_shared/claims.ts";
 import { embedTexts } from "../_shared/embed.ts";
 import {
   ANTHROPIC_VERSION,
@@ -122,7 +122,7 @@ async function chat(req: Request): Promise<Response> {
 
   const { data: application, error: appError } = await client
     .from("applications")
-    .select("id, company, role, level")
+    .select("id, company, role, level, company_id, role_id, level_id")
     .eq("id", applicationId)
     .single();
 
@@ -135,14 +135,15 @@ async function chat(req: Request): Promise<Response> {
 
   const [embedding] = await embedTexts([question]);
 
-  const company = normaliseCompany(application.company);
-  const role = normaliseRole(application.role);
+  const keys = prepKeysFromApplication(application);
+  const company = keys.company;
+  const role = keys.role;
 
   let claims = await matchClaims(client, {
     embedding,
     company,
     role,
-    level: application.level,
+    level: keys.level,
     matchCount: 10,
     minSimilarity: 0.25,
   });
@@ -154,7 +155,7 @@ async function chat(req: Request): Promise<Response> {
       embedding,
       company,
       role,
-      level: application.level,
+      level: keys.level,
       matchCount: 5,
       minSimilarity: 0,
     });

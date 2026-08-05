@@ -1,19 +1,18 @@
 /**
- * Company name matching for grouping roles at the same employer.
+ * Company / role matching helpers.
  *
- * Deliberately identical to `normaliseCompany` in
- * `supabase/functions/_shared/claims.ts`, which decides the `company` key on
- * every `prep_chunks` row. The two cannot import from each other — one is a Vite
- * bundle, the other a Deno function — so they are kept in step by hand. If they
- * drift, the UI counts a company-wide source that retrieval will not match, or
- * hides one it would, which is the specific lie this whole feature exists to
- * avoid. Change both or neither.
- *
- * **Planned (PROJECT.md §16, not built):** level equivalence (Mid ≈ L3), role-title
- * cleanup for search (`(FTC)` etc.), and a Deno mirror for whatever lands here.
+ * `normaliseCompany` is deliberately identical to
+ * `supabase/functions/_shared/claims.ts` — Vite and Deno cannot share a module.
+ * Catalog picks prefer stable slugs (`google`, `software_engineer`, `mid`) as
+ * prep keys; these helpers are for customs and sibling UI matching.
  */
+
 const LEGAL_SUFFIXES =
   /\b(inc|incorporated|llc|ltd|limited|corp|corporation|co|company|plc|gmbh|ag|sa|nv|bv)\b\.?/gi;
+
+/** Noise that belongs in specialty / employment_type, not the role title. */
+const ROLE_PAREN_NOISE =
+  /\s*[\(\[]\s*(ftc|contract|contractor|temp|temporary|remote|hybrid|onsite|on-site|full[\s-]?time|part[\s-]?time|fte|intern(?:ship)?)\s*[\)\]]/gi;
 
 export function normaliseCompany(name: string): string {
   return name
@@ -26,4 +25,17 @@ export function normaliseCompany(name: string): string {
 
 export function normaliseRole(role: string): string {
   return role.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/** Strip parenthetical employment/location noise from a custom role title. */
+export function stripRoleNoise(role: string): string {
+  return role
+    .replace(ROLE_PAREN_NOISE, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** Prep / search key for a custom role title. */
+export function normaliseRoleForPrep(role: string): string {
+  return normaliseRole(stripRoleNoise(role));
 }

@@ -29,7 +29,7 @@ What exists in the repo today, as distinct from what's planned below.
 
 **Spending is real now, and the cap still isn't set.** `.env.development.local` sets `VITE_AI_PROVIDER=edge` and the Anthropic key sits in `supabase/.env.local`, so on this machine pressing "Analyze resume" bills a real key with nothing behind it. Two hundred milli-dollars across three runs is a rounding error; the reason it is written down is that half of it bought nothing, in code that had been read and never run, and the in-code guards do not bound a bill — the daily cap counts *saved* reports, so a call that gets billed and then fails never moves the counter. What is still true is narrower than it was: nothing spends without an explicit press, and an environment that has not opted in, Vercel included, still gets the local provider, whose every report is a labelled sample carrying an on-screen "no model was called" banner and is never written to the database.
 
-**Company prep RAG, new:** paste notes, URL (robots.txt gate), or PDF → extract restated atomic claims (never verbatim page text) → embed with OpenAI → retrieve in prep chat with provenance. Chat is multi-turn (last 8 messages), citations are clickable, Save to prep suggests claims from the exchange. Company facts from first-party/news can share immediately; interview claims stay private until candidate corroboration. The prep panel now counts what actually grounds an answer rather than what was filed under one role: a company-scope source appears on every role at that company marked company-wide, and shared claims contributed by other candidates are counted beside them. See version history 5 Aug and [PHASE3_SPEC.md](PHASE3_SPEC.md).
+**Company prep RAG, new:** paste notes, URL (robots.txt gate), or PDF → extract restated atomic claims (never verbatim page text) → embed with OpenAI → retrieve in prep chat with provenance. Chat is multi-turn (last 8 messages), citations are clickable, Save to prep suggests claims from the exchange. Company facts from first-party/news can share immediately; interview claims stay private until candidate corroboration. Prep panel counts company-scope sibling sources and shared claims. **Catalog-first add-role** (typeahead company/role, generic levels, specialty/employment type) feeds stable prep slugs and cleaner LinkedIn search. See §16 and [PHASE3_SPEC.md](PHASE3_SPEC.md).
 
 **Still not real:** JD tailoring and referral drafts still run the local mock. Also absent: Discover's job feeds, Practice, the browser extension. Each says so on screen rather than pretending.
 
@@ -148,43 +148,29 @@ Prep over volume; truthful by design; human always acts (never auto-submits/send
 
 **Still to close for live MVP:** confirm `OPENAI_API_KEY` is set as a hosted secret; redeploy the Vercel app if `VITE_AI_PROVIDER=edge` is not already live so prep chat uses the edge provider. Functions `ingest-prep-source`, `prep-chat`, `save-prep-claims` are deployed.
 
-**Next after that:** JD tailoring for real · confidence number in UI · Sentry/PostHog · landing claim fix · **normalization layer** (§16 — role/level equivalence, search-safe titles, LinkedIn current-employer filter).
+**Next after that:** JD tailoring for real · confidence number in UI · Sentry/PostHog · landing claim fix. Catalog-first company/role/level is shipped (§16).
 
-## 16. Normalization backlog (planned, not started)
+## 16. Catalog-first company / role / level (built)
 
-Several surfaces today use the raw strings the user typed — `applications.role`, `applications.level`, `applications.company` — with only light trimming (`normaliseCompany` / `normaliseRole` strip case, legal suffixes and whitespace). That is enough for corpus keys; it is not enough for matching equivalent seniority, opening a useful LinkedIn people search, or grouping two roles that are really the same loop.
+**Problem this solved:** free-text company/role/level fragmented prep keys (Mid vs L3), put `(FTC)` into LinkedIn searches, and matched "Figma" in bios instead of current employer.
 
-**Build a shared normalizer module** (extend [`src/lib/company.ts`](src/lib/company.ts) or a sibling `src/lib/normalize.ts`, with a Deno mirror under `supabase/functions/_shared/` the same way company names are duplicated today). Consumers would include prep retrieval, the tracker, and Referrals.
+**Approach:** curated catalog + typeahead, not string-normalizer-first. Users pick when possible; Custom + request when not.
 
-### 16.1 Level equivalence
+### What shipped (migration `0008_catalog.sql`)
 
-**Problem:** "Software Engineer · Mid" and "Software Engineer · L3" are the same loop at most companies, but today they are different keys everywhere — `prep_chunks.level`, sibling source counts, depth, chat retrieval via `match_prep_chunks`.
+- **Tables:** `catalog_levels`, `catalog_companies` (~40 high-interview names + domain + optional `linkedin_company_id`), `catalog_roles` (~28 families), `catalog_role_aliases` (swe/sde → Software Engineer), `catalog_requests` (user asks for missing company/role).
+- **`applications`:** nullable `company_id` / `role_id` / `level_id`, plus `specialty` and `employment_type` (`full_time`|`contract`|`intern`|`other`). Display `company` / `role` / `level` text still stored.
+- **Levels (generic, not L-bands):** Intern, Associate, Entry, Mid, Senior, Staff, Principal, Manager, Director, VP, C-level / Executive.
+- **RoleDialog:** search-as-you-type Combobox for company and role; level select from ladder; specialty + employment type; "Request it" writes `catalog_requests`.
+- **Prep keys:** Edge ingest / chat / save-claims use `prepKeysFromApplication` — catalog slug ids when FKs set (`google`, `software_engineer`, `mid`), else normalised custom text with `stripRoleNoise`.
+- **Referrals:** [`linkedinSearch.ts`](src/lib/linkedinSearch.ts) — keywords = cleaned role + specialty; `currentCompany` facet when LinkedIn org id is seeded.
 
-**Direction:** a canonical level ladder per employer *or* a cross-company default map, e.g. `mid → L3`, `senior → L4`, with explicit overrides for companies that publish their own bands (Google L3–L11, etc.). Retrieval should match when either side is null **or** when normalized levels are equivalent, not only on exact string equality.
+### Still later
 
-**Open design questions (decide before coding):** store canonical level on write vs. normalize only at query time; whether the user sees their original label or the canonical one; how to handle unknown levels ("Staff", "II", "59") without silently merging distinct loops.
-
-### 16.2 Role title cleanup (for search and matching)
-
-**Problem:** role strings carry noise that is correct on the posting but wrong for search — parentheticals, contract markers, location suffixes. Example from the app today: **"Recruitment Coordinator (FTC)"** is sent verbatim to LinkedIn; the useful search term is **"Recruitment Coordinator"**.
-
-**Direction:** `normalizeRoleTitle(raw)` — strip `(FTC)`, `(Contract)`, `(Remote)`, trailing level tokens already captured in `level`, and other predictable suffixes; keep a display copy untouched. Same function should feed prep chunk keys once level equivalence exists, so "Software Engineer" + "Mid" and "Software Engineer" + "L3" collapse consistently.
-
-### 16.3 LinkedIn people search — current company only
-
-**Problem:** Referrals builds the search URL in [`ReferralsTab.tsx`](src/components/detail/ReferralsTab.tsx) as:
-
-```text
-keywords=<company> <role>&network=["S"]
-```
-
-So a Figma role searches **`figma software engineer`** as free text. LinkedIn matches that anywhere in the profile — headline, about, past jobs — not **currently employed at Figma**. Results include alumni, consultants who mention Figma, and people who wish they worked there.
-
-**Direction:** research LinkedIn's supported URL facets for *current company* (Sales Navigator and Premium expose this; the public people-search URL may need a company URN or `currentCompany` filter — verify against what a logged-in free user can actually open from a link). Goal: **people whose current employer is the target company**, optionally still filtered to 2nd-degree (`network=S`). Combine with §16.2 so keywords are the cleaned title, not the raw posting string.
-
-**Constraint (unchanged):** still no scraping, no send-on-behalf — open LinkedIn, user sends. Normalization only improves the link we hand them.
-
-**Status:** documented 5 Aug 2026; no code yet. When picked up, add tests for the strip rules and manually verify one search per company (Figma, a parenthetical title like the Robert Walters FTC role) before shipping.
+- Grow catalog from requests; seed more LinkedIn org ids.
+- Merge-votes when multiple users confirm custom duplicates (SWE vs SDE left as custom).
+- Optional company-level hints ("At Google, Mid ≈ L3") — display only, never stored keys.
+- Thin normalizer remains only for **customs** and legacy display matching.
 
 ## 14. Rebuilding the resume (built, free to run)
 
@@ -235,6 +221,7 @@ Also unknown and worth checking, since the report came from the rewrite flow spe
 
 *Major changes only, going forward.*
 
+- **5 Aug 2026 — catalog-first company / role / level (option 3).** Free-text entry was fragmenting prep keys and poisoning LinkedIn search. Migration `0008`: catalog tables + aliases + requests; applications get FKs, specialty, employment_type. RoleDialog typeahead (Combobox) with Custom and request. Prep edge functions key off catalog slugs via `prepKeysFromApplication`. Referrals use cleaned titles + `currentCompany` when a LinkedIn org id is seeded. Levels are generic (Intern…Executive), never L1/L2/L3. Merge-votes for custom duplicates stay later. Local test applications/prep wiped for clean keys.
 - **5 Aug 2026 — the prep panel was under-reporting itself, which looked like a broken chat.** Two Google roles side by side: one showed "1 source", the other "0 sources · Cold start" while its chat answered Google questions in detail and cited them. Nothing was actually broken — the count was reading `prep_sources` rows filed under one `application_id`, while retrieval matches any claim whose company and role are null or equal. A role therefore draws on two things the old count could never see: **company-scope sources added under a sibling role**, and **shared claims contributed by other accounts**, whose source row RLS hides permanently and correctly. The fix is honesty about grounding rather than any change to what gets retrieved: sibling company-scope sources are listed and counted on every role at that company, badged `company-wide` and with no delete button since they aren't that role's to remove; shared claims are reported as a count ("plus 2 shared claims about Google from other candidates") which never names anyone else's upload; and "Cold start" now requires that all three be empty. One duplication was accepted deliberately — `normaliseCompany` now exists in both the Vite bundle and the Deno functions, because sibling-matching in the browser has to agree with the `company` key the server writes, and the two runtimes cannot import each other. Both copies reduce `Google Inc.`, `GOOGLE, LLC` and `Google` to `google`; §10 records that they must be changed together.
 - **5 Aug 2026 — prep chat stopped forgetting, and stopped denying the sources it had just cited.** Each turn was stateless: `prep-chat` got only the latest question, so follow-ups like "save it, it was in an interview" had nothing to resolve against. The system prompt also told the model to answer *only* from claims in a way that made it invent "I cannot access your index" even when citation pills were already on the answer. Now: last 8 turns travel with the question; claims are re-retrieved every turn; structured `{ answer, suggestedClaims }` so Save to prep comes from the exchange rather than dumping retrieved rows; labeled general coaching is allowed when claims don't cover (still never invent company-specific facts); citation pills and bare URLs in answers are clickable; Shift+Enter newlines in the ask box. Soft retrieval fallback when similarity ≥ 0.25 returns empty.
 - **5 Aug 2026 — company prep RAG is real (claim-based, not verbatim pages).** Migration `0007`: `prep_chunks` + pgvector + `match_prep_chunks`, `applications.company_domain`, `prep-sources` bucket, `relevance_check` on the allowance ledger. Three Edge Functions: `ingest-prep-source` (URL via robots.txt → extract restated claims → embed; PDF/paste same extract path), `prep-chat` (retrieve + Haiku, answer only from claims), `save-prep-claims` (explicit Save to prep checklist). **Sharing is asymmetric:** company facts from first-party or news can be shared immediately; interview/process claims always start private and promote only at `corroboration_count >= 2` with ≥1 `candidate_report`. Consent copy scoped to the user's own notes/recaps. Legal note in §11: robots-allow is an access gate, not a redistribution license. Migration and all five functions are now on the hosted project. **The first ingest attempt failed for a reason that had nothing to do with any of the above, and took the résumé features down with it:** `ANTHROPIC_MODEL` had been switched to Haiku that morning to cut cost, and Haiku rejects `output_config.effort` outright while still accepting the `format` half of the same object — so analysis, rewrites, extraction and chat all began failing at once with "the model service could not process this request". Free, since a 400 is refused before tokens are counted, but invisible: the code logged the status and not the body, so a message Anthropic had spelled out by name had to be rediscovered with `curl`. `effort` is now assembled per-model rather than written inline, unknown models are assumed not to support it, and every non-`ok` model response logs its body. Both fixes are in `_shared/model.ts` so the next model swap is a config change rather than an outage.

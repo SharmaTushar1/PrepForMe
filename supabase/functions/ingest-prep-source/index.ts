@@ -18,8 +18,7 @@ import {
   extractClaims,
   htmlToText,
   isFirstPartyUrl,
-  normaliseCompany,
-  normaliseRole,
+  prepKeysFromApplication,
 } from "../_shared/claims.ts";
 import {
   embedClaims,
@@ -114,7 +113,7 @@ async function ingest(req: Request): Promise<Response> {
 
   const { data: application, error: appError } = await client
     .from("applications")
-    .select("id, company, role, level, company_domain")
+    .select("id, company, role, level, company_domain, company_id, role_id, level_id")
     .eq("id", source.application_id)
     .single();
 
@@ -214,11 +213,10 @@ async function ingest(req: Request): Promise<Response> {
         !isFirstPartyUrl(sourceUrl, application.company_domain) &&
         /news|press|funding|techcrunch|bloomberg|reuters/i.test(sourceUrl));
 
-    const company = normaliseCompany(application.company);
-    const roleScope = source.scope === "company"
-      ? null
-      : normaliseRole(application.role);
-    const levelScope = source.scope === "company" ? null : application.level;
+    const keys = prepKeysFromApplication(application);
+    const company = keys.company;
+    const roleScope = source.scope === "company" ? null : keys.role;
+    const levelScope = source.scope === "company" ? null : keys.level;
 
     const classified = extracted.map((claim) =>
       classifyClaim(claim, {

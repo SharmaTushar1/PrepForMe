@@ -331,8 +331,9 @@ Files in [`supabase/migrations/`](supabase/migrations), applied in filename orde
 | `0005_resume_edits.sql` | `resume_improvements` and `resume_edits`, RLS, grants, `updated_at` triggers |
 | `0006_ai_quota.sql` | `ai_usage` attempts ledger, and narrowed `user_settings` grants so `plan` is not self-service |
 | `0007_prep_corpus.sql` | `vector` extension, `applications.company_domain`, `prep_chunks` + HNSW + `match_prep_chunks`, `prep-sources` bucket, prep_sources scope/input columns, `relevance_check` on `ai_usage` |
+| `0008_catalog.sql` | `catalog_levels` / `companies` / `roles` / `role_aliases` / `requests`; `applications` FKs + specialty + employment_type |
 
-`0001`–`0007` are applied to the hosted project (history repaired 5 Aug so `db push` could land `0007`). Local and hosted both have `prep_chunks`, the `prep-sources` bucket, and `relevance_check` on `ai_usage`.
+`0001`–`0007` are applied to the hosted project (history repaired 5 Aug so `db push` could land `0007`). **`0008` is applied locally; push to hosted before relying on catalog FKs in production.** Local and hosted both have `prep_chunks`, the `prep-sources` bucket, and `relevance_check` on `ai_usage`.
 
 **The hosted ledger is not to be trusted, and this has already bitten.** Several migrations
 were applied there by hand — SQL Editor and the Management API — so
@@ -853,17 +854,19 @@ Things that have already cost time, or will.
   [`src/lib/company.ts`](src/lib/company.ts) and
   [`_shared/claims.ts`](supabase/functions/_shared/claims.ts) hold the same function
   because one is bundled by Vite and the other runs in Deno; neither can import the other.
-  The server copy decides `prep_chunks.company`, the client copy decides which roles are
-  siblings, so a divergence silently means the UI counts a source retrieval won't use, or
-  hides one it will. `"Google Inc."`, `"GOOGLE, LLC"` and `"Google"` must all reduce to
-  `google` on both sides — checked by running the same inputs through each.
-- **Referrals LinkedIn search is naive today — see PROJECT.md §16 before "fixing" it
-  inline.** [`ReferralsTab.tsx`](src/components/detail/ReferralsTab.tsx) builds
-  `keywords=<company> <role>` with the raw application strings and a 2nd-degree network
-  filter only. That matches the company name anywhere in a profile, not current employment,
-  and sends parenthetical posting noise (`Recruitment Coordinator (FTC)`) verbatim. A
-  shared normalizer (level equivalence, title cleanup, company-scoped search URL) is
-  planned; do not add ad-hoc `.replace()` calls in the component.
+  Catalog picks bypass this for prep keys (they use slug ids via `prepKeysFromApplication`).
+  The free-text half still decides sibling UI matching and custom corpus keys — `"Google Inc."`
+  and `"Google"` must both reduce to `google` on both sides.
+- **Catalog slugs are the preferred prep keys.** When `applications.company_id` /
+  `role_id` / `level_id` are set, ingest/chat/save write those ids into `prep_chunks`
+  (`google`, `software_engineer`, `mid`). Customs still go through normalise +
+  `stripRoleNoise`. Do not invent Mid≈L3 string maps for catalog rows — the level
+  ladder is already generic (see PROJECT.md §16).
+- **Referrals LinkedIn URL** is built by [`linkedinSearch.ts`](src/lib/linkedinSearch.ts):
+  cleaned role + specialty as keywords; `currentCompany` when
+  `catalog_companies.linkedin_company_id` is set. Without an org id it still falls back
+  to company-in-keywords (imperfect). Do not hardcode `keywords=<company> <role>` in the
+  component again.
 - **`JWT issued at future` (`PGRST303`) on every local query is a stale container, not an
   auth bug.** After the Mac sleeps, the Docker VM clock jumps on resume and PostgREST's
   cached time can stay behind it, so it reads perfectly good tokens as coming from the

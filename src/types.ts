@@ -18,6 +18,8 @@ export type RecapOutcome = "rough" | "ok" | "went_well";
 
 // ------------------------------------------------------------------ domain
 
+export type EmploymentType = "full_time" | "contract" | "intern" | "other";
+
 export interface Application {
   id: string;
   company: string;
@@ -27,6 +29,17 @@ export interface Application {
   postingUrl: string | null;
   /** Confirmed domain for first-party URL detection, e.g. abnormal.ai */
   companyDomain: string | null;
+  /** Catalog company slug when picked; null = custom. */
+  companyId: string | null;
+  /** Catalog role family slug when picked; null = custom. */
+  roleId: string | null;
+  /** Catalog level id (mid, senior, …); null if unset. */
+  levelId: string | null;
+  /** Optional focus within the role family (Frontend, Enterprise, …). */
+  specialty: string | null;
+  employmentType: EmploymentType | null;
+  /** LinkedIn org id from catalog when companyId is set; for referral search. */
+  linkedinCompanyId: string | null;
   jobDescription: string | null;
   nextAction: string | null;
   nextActionAt: string | null;
@@ -47,12 +60,35 @@ export interface ApplicationDraft {
   company: string;
   role: string;
   level?: string | null;
+  companyId?: string | null;
+  roleId?: string | null;
+  levelId?: string | null;
+  specialty?: string | null;
+  employmentType?: EmploymentType | null;
   stage?: Stage;
   postingUrl?: string | null;
   companyDomain?: string | null;
   jobDescription?: string | null;
   nextAction?: string | null;
   nextActionAt?: string | null;
+}
+
+export interface CatalogLevel {
+  id: string;
+  label: string;
+  sortOrder: number;
+}
+
+export interface CatalogCompany {
+  id: string;
+  name: string;
+  domain: string | null;
+  linkedinCompanyId: string | null;
+}
+
+export interface CatalogRole {
+  id: string;
+  name: string;
 }
 
 export interface Profile {

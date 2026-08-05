@@ -11,8 +11,7 @@ import {
   preflightResponse,
 } from "../_shared/cors.ts";
 import {
-  normaliseCompany,
-  normaliseRole,
+  prepKeysFromApplication,
   type ClaimKind,
   type Provenance,
 } from "../_shared/claims.ts";
@@ -90,7 +89,7 @@ async function save(req: Request): Promise<Response> {
 
   const { data: application, error: appError } = await client
     .from("applications")
-    .select("id, company, role, level")
+    .select("id, company, role, level, company_id, role_id, level_id")
     .eq("id", applicationId)
     .single();
 
@@ -124,17 +123,16 @@ async function save(req: Request): Promise<Response> {
   }
 
   const embeddings = await embedClaims(normalised.map((c) => c.content));
-  const company = normaliseCompany(application.company);
-  const role = normaliseRole(application.role);
+  const keys = prepKeysFromApplication(application);
 
   const inserts: ChunkInsert[] = normalised.map((claim, i) => ({
     userId: user.id,
     applicationId: application.id,
     sourceId: null,
     recapId: null,
-    company,
-    role,
-    level: application.level,
+    company: keys.company,
+    role: keys.role,
+    level: keys.level,
     interviewType: null,
     claimKind: claim.claimKind,
     content: claim.content,

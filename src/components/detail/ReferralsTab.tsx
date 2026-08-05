@@ -11,6 +11,7 @@ import {
   useUpdateSettings,
 } from "../../data/settings";
 import type { DecoratedApp } from "../../data/derived";
+import { linkedinPeopleSearchUrl } from "../../lib/linkedinSearch";
 import { Loading, Toggle } from "../ui";
 
 export function ReferralsTab({ app }: { app: DecoratedApp }) {
@@ -36,10 +37,12 @@ export function ReferralsTab({ app }: { app: DecoratedApp }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.id, app.role, app.company, cap, context.loading, context.experiences]);
 
-  const linkedinUrl =
-    "https://www.linkedin.com/search/results/people/?keywords=" +
-    encodeURIComponent(`${app.company} ${app.role}`) +
-    "&network=%5B%22S%22%5D&origin=FACETED_SEARCH";
+  const linkedinUrl = linkedinPeopleSearchUrl({
+    company: app.company,
+    role: app.role,
+    specialty: app.specialty,
+    linkedinCompanyId: app.linkedinCompanyId,
+  });
 
   const capLabel = `${settings.linkedinPremium ? PREMIUM_CHAR_LIMIT : FREE_CHAR_LIMIT} max · ${
     settings.linkedinPremium ? "Premium invite" : "free invite"

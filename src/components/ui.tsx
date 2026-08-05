@@ -156,6 +156,111 @@ export function Select<T extends string>({
   );
 }
 
+/**
+ * Search-as-you-type picker. Typing filters `options`; picking sets the value
+ * and id. Clearing or typing something that matches nothing keeps the text as
+ * a custom value (id null) when `allowCustom` is true.
+ */
+export function Combobox({
+  value,
+  onChange,
+  options,
+  placeholder,
+  ariaLabel,
+  disabled,
+  autoFocus,
+  emptyHint = "No matches — keep typing for a custom value",
+}: {
+  value: { id: string | null; label: string };
+  onChange: (next: { id: string | null; label: string }) => void;
+  options: readonly { id: string; label: string; hint?: string }[];
+  placeholder?: string;
+  ariaLabel?: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+  emptyHint?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  return (
+    <div ref={rootRef} style={{ position: "relative" }}>
+      <input
+        className="field"
+        value={value.label}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-autocomplete="list"
+        role="combobox"
+        onChange={(e) => {
+          onChange({ id: null, label: e.target.value });
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
+      />
+      {open && (
+        <div
+          role="listbox"
+          style={css(
+            "position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:20; max-height:220px; overflow-y:auto; background:#fff; border:1px solid oklch(0.88 0.006 260); border-radius:10px; box-shadow:0 12px 32px -16px oklch(0.2 0.04 260 / 0.45);",
+          )}
+        >
+          {options.length === 0 ? (
+            <div style={css("padding:10px 12px; font-size:12.5px; color:oklch(0.5 0.015 260);")}>
+              {emptyHint}
+            </div>
+          ) : (
+            options.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                role="option"
+                aria-selected={value.id === o.id}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onChange({ id: o.id, label: o.label });
+                  setOpen(false);
+                }}
+                style={css(
+                  "display:block; width:100%; text-align:left; padding:9px 12px; border:none; background:transparent; cursor:pointer; font-family:'IBM Plex Sans'; font-size:13.5px;",
+                )}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background =
+                    "oklch(0.96 0.01 260)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                }}
+              >
+                {o.label}
+                {o.hint ? (
+                  <span style={css("margin-left:8px; font-size:11.5px; color:oklch(0.55 0.015 260);")}>
+                    {o.hint}
+                  </span>
+                ) : null}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Toggle({
   on,
   onToggle,

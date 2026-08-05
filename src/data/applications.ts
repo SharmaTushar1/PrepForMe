@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, unwrap } from "../lib/supabase";
 import type { ApplicationRow, StageEventRow } from "../lib/db.types";
-import type { Application, ApplicationDraft, Stage } from "../types";
+import type { Application, ApplicationDraft, EmploymentType, Stage } from "../types";
 import { STAGES } from "../data";
 import { useSession } from "../auth/SessionProvider";
 import { normaliseCompany } from "../lib/company";
@@ -11,14 +11,16 @@ import { keys } from "./queryKeys";
  * Child ids are selected alongside each row so counts come back in one round
  * trip without depending on PostgREST aggregate support. `scope` rides along
  * because a company-scope source counts for every role at that company — see
- * `countSources`.
+ * `countSources`. Catalog embed supplies LinkedIn org id for referral search.
  */
 type ApplicationWithCounts = ApplicationRow & {
   recaps: { id: string }[] | null;
   prep_sources: { id: string; scope: string | null }[] | null;
+  catalog_companies: { linkedin_company_id: string | null } | null;
 };
 
-const SELECT = "*, recaps(id), prep_sources(id, scope)";
+const SELECT =
+  "*, recaps(id), prep_sources(id, scope), catalog_companies(linkedin_company_id)";
 
 /**
  * `sourceCount` is passed in because it can't be read off one row: a role's
@@ -38,6 +40,12 @@ function toApplication(
     stage: row.stage,
     postingUrl: row.posting_url,
     companyDomain: row.company_domain ?? null,
+    companyId: row.company_id ?? null,
+    roleId: row.role_id ?? null,
+    levelId: row.level_id ?? null,
+    specialty: row.specialty ?? null,
+    employmentType: row.employment_type ?? null,
+    linkedinCompanyId: row.catalog_companies?.linkedin_company_id ?? null,
     jobDescription: row.job_description,
     nextAction: row.next_action,
     nextActionAt: row.next_action_at,
@@ -51,20 +59,17 @@ function toApplication(
 }
 
 /**
- * Sources this role can actually draw on: its own, plus every company-scope
- * source added under a sibling role at the same company.
- *
- * A company-scope source is stored with `role`/`level` null on its
- * `prep_chunks`, and `match_prep_chunks` matches null role against any role. So
- * the coach already answers a second Google role from the first one's careers
- * page. Counting only `application_id` rows made a role that had company-wide
- * claims behind it report "0 sources · Cold start", which reads as "the coach
- * has nothing" when the opposite is true.
+ * Prefer catalog company_id for sibling matching; fall back to normalised
+ * display name for customs.
  */
+function companyKey(row: ApplicationWithCounts): string {
+  return row.company_id ?? normaliseCompany(row.company);
+}
+
 function countSources(rows: ApplicationWithCounts[]): Map<string, number> {
   const companyWide = new Map<string, Set<string>>();
   for (const row of rows) {
-    const key = normaliseCompany(row.company);
+    const key = companyKey(row);
     for (const source of row.prep_sources ?? []) {
       if (source.scope !== "company") continue;
       const set = companyWide.get(key) ?? new Set<string>();
@@ -77,7 +82,7 @@ function countSources(rows: ApplicationWithCounts[]): Map<string, number> {
   for (const row of rows) {
     const own = row.prep_sources ?? [];
     const ownIds = new Set(own.map((s) => s.id));
-    const shared = companyWide.get(normaliseCompany(row.company)) ?? new Set<string>();
+    const shared = companyWide.get(companyKey(row)) ?? new Set<string>();
     let extra = 0;
     for (const id of shared) if (!ownIds.has(id)) extra += 1;
     counts.set(row.id, own.length + extra);
@@ -94,7 +99,6 @@ export function guessCompanyDomain(postingUrl: string | null | undefined): strin
     ).hostname
       .toLowerCase()
       .replace(/^www\./, "");
-    // Skip common ATS hosts — those aren't the company domain.
     if (
       /greenhouse\.io$|lever\.co$|ashbyhq\.com$|workday\.com$|myworkdayjobs\.com$|jobs\.|careers\./
         .test(host)
@@ -122,7 +126,6 @@ export function useApplications() {
   });
 }
 
-/** Every stage transition the user has ever made — the basis for the funnel. */
 export function useStageEvents() {
   const { userId } = useSession();
   return useQuery({
@@ -138,6 +141,28 @@ export function useStageEvents() {
   });
 }
 
+function draftPayload(draft: ApplicationDraft) {
+  return {
+    company: draft.company.trim(),
+    role: draft.role.trim(),
+    level: draft.level?.trim() || null,
+    company_id: draft.companyId || null,
+    role_id: draft.roleId || null,
+    level_id: draft.levelId || null,
+    specialty: draft.specialty?.trim() || null,
+    employment_type: draft.employmentType || null,
+    stage: draft.stage ?? "Saved",
+    posting_url: draft.postingUrl?.trim() || null,
+    company_domain:
+      draft.companyDomain?.trim() ||
+      guessCompanyDomain(draft.postingUrl) ||
+      null,
+    job_description: draft.jobDescription?.trim() || null,
+    next_action: draft.nextAction?.trim() || null,
+    next_action_at: draft.nextActionAt || null,
+  };
+}
+
 export function useCreateApplication() {
   const queryClient = useQueryClient();
   const { userId } = useSession();
@@ -145,24 +170,7 @@ export function useCreateApplication() {
   return useMutation({
     mutationFn: async (draft: ApplicationDraft): Promise<Application> => {
       const row = await unwrap<ApplicationWithCounts>(
-        supabase
-          .from("applications")
-          .insert({
-            company: draft.company.trim(),
-            role: draft.role.trim(),
-            level: draft.level?.trim() || null,
-            stage: draft.stage ?? "Saved",
-            posting_url: draft.postingUrl?.trim() || null,
-            company_domain:
-              draft.companyDomain?.trim() ||
-              guessCompanyDomain(draft.postingUrl) ||
-              null,
-            job_description: draft.jobDescription?.trim() || null,
-            next_action: draft.nextAction?.trim() || null,
-            next_action_at: draft.nextActionAt || null,
-          })
-          .select(SELECT)
-          .single(),
+        supabase.from("applications").insert(draftPayload(draft)).select(SELECT).single(),
       );
       return toApplication(row);
     },
@@ -178,6 +186,11 @@ export interface ApplicationPatch {
   company?: string;
   role?: string;
   level?: string | null;
+  companyId?: string | null;
+  roleId?: string | null;
+  levelId?: string | null;
+  specialty?: string | null;
+  employmentType?: EmploymentType | null;
   stage?: Stage;
   postingUrl?: string | null;
   companyDomain?: string | null;
@@ -197,6 +210,13 @@ export function useUpdateApplication() {
       if (patch.company !== undefined) payload.company = patch.company.trim();
       if (patch.role !== undefined) payload.role = patch.role.trim();
       if (patch.level !== undefined) payload.level = patch.level?.trim() || null;
+      if (patch.companyId !== undefined) payload.company_id = patch.companyId || null;
+      if (patch.roleId !== undefined) payload.role_id = patch.roleId || null;
+      if (patch.levelId !== undefined) payload.level_id = patch.levelId || null;
+      if (patch.specialty !== undefined) payload.specialty = patch.specialty?.trim() || null;
+      if (patch.employmentType !== undefined) {
+        payload.employment_type = patch.employmentType || null;
+      }
       if (patch.stage !== undefined) payload.stage = patch.stage;
       if (patch.postingUrl !== undefined) payload.posting_url = patch.postingUrl?.trim() || null;
       if (patch.companyDomain !== undefined) {
@@ -222,7 +242,6 @@ export function useUpdateApplication() {
   });
 }
 
-/** The next stage in the pipeline, or null at the end of it. */
 export function nextStage(stage: Stage): Stage | null {
   const i = STAGES.indexOf(stage);
   if (i < 0 || i >= STAGES.length - 1) return null;

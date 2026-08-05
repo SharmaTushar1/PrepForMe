@@ -66,6 +66,48 @@ export function normaliseRole(role: string): string {
   return role.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+/** Parentheticals that belong in employment_type / specialty, not the title. */
+const ROLE_PAREN_NOISE =
+  /\s*[\(\[]\s*(ftc|contract|contractor|temp|temporary|remote|hybrid|onsite|on-site|full[\s-]?time|part[\s-]?time|fte|intern(?:ship)?)\s*[\)\]]/gi;
+
+export function stripRoleNoise(role: string): string {
+  return role
+    .replace(ROLE_PAREN_NOISE, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+export function normaliseRoleForPrep(role: string): string {
+  return normaliseRole(stripRoleNoise(role));
+}
+
+export interface ApplicationForPrepKeys {
+  company: string;
+  role: string;
+  level: string | null;
+  company_id?: string | null;
+  role_id?: string | null;
+  level_id?: string | null;
+}
+
+/**
+ * Stable prep_chunks keys. Catalog FKs win (slug ids); customs fall back to
+ * normalised display text with role noise stripped. Keep in step with
+ * src/lib/company.ts for the free-text half.
+ */
+export function prepKeysFromApplication(app: ApplicationForPrepKeys): {
+  company: string;
+  role: string;
+  level: string | null;
+} {
+  return {
+    company: app.company_id?.trim() || normaliseCompany(app.company),
+    role: app.role_id?.trim() || normaliseRoleForPrep(app.role),
+    level: app.level_id?.trim() ||
+      (app.level?.trim() ? normaliseRole(app.level.trim()) : null),
+  };
+}
+
 /** Registrable-ish host: strip www. */
 export function normaliseDomain(hostOrUrl: string): string | null {
   try {

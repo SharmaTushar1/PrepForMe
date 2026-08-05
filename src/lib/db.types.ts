@@ -70,6 +70,8 @@ export interface SkillRow {
   created_at: string;
 }
 
+export type EmploymentTypeRow = "full_time" | "contract" | "intern" | "other";
+
 export interface ApplicationRow {
   id: string;
   user_id: string;
@@ -79,6 +81,11 @@ export interface ApplicationRow {
   stage: Stage;
   posting_url: string | null;
   company_domain: string | null;
+  company_id: string | null;
+  role_id: string | null;
+  level_id: string | null;
+  specialty: string | null;
+  employment_type: EmploymentTypeRow | null;
   job_description: string | null;
   next_action: string | null;
   next_action_at: string | null;
@@ -86,6 +93,29 @@ export interface ApplicationRow {
   resume_tailored: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface CatalogLevelRow {
+  id: string;
+  label: string;
+  sort_order: number;
+}
+
+export interface CatalogCompanyRow {
+  id: string;
+  name: string;
+  domain: string | null;
+  linkedin_company_id: string | null;
+}
+
+export interface CatalogRoleRow {
+  id: string;
+  name: string;
+}
+
+export interface CatalogRoleAliasRow {
+  alias: string;
+  role_id: string;
 }
 
 export interface StageEventRow {

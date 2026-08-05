@@ -25,6 +25,9 @@ export const keys = {
    */
   sharedClaims: (company: string, role: string) =>
     ["sharedClaims", company, role] as const,
+  catalogLevels: () => ["catalogLevels"] as const,
+  catalogCompanies: () => ["catalogCompanies"] as const,
+  catalogRoles: () => ["catalogRoles"] as const,
   prepMessages: (userId: string, applicationId: string) =>
     ["prepMessages", userId, applicationId] as const,
   resume: (userId: string, resumeId: string) => ["resume", userId, resumeId] as const,

@@ -4,7 +4,7 @@
   ],
   "functions": {
     "api/render-resume-pdf.ts": {
-      "memory": 1024,
+      "memory": 1536,
       "maxDuration": 60
     }
   }

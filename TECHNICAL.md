@@ -4,7 +4,7 @@
 [PROJECT.md](PROJECT.md), which holds strategy, scope, and decisions. Update this file
 whenever the stack, schema, hosting, or environment changes.*
 
-**Last updated:** 6 Aug 2026
+**Last updated:** 7 Aug 2026
 
 ---
 
@@ -20,7 +20,7 @@ whenever the stack, schema, hosting, or environment changes.*
 | Auth | Magic link + Google OAuth (no passwords) |
 | Files | Private Storage buckets `resumes` and `prep-sources` — see §6 |
 | Styling | No UI framework. Inline style strings parsed by [`src/css.ts`](src/css.ts), plus a small [`src/index.css`](src/index.css) for form-control resets |
-| Resume PDF | HTML templates (Classic/Compact) → Chromium on Vercel (`api/render-resume-pdf.ts`); local Vite middleware for `npm run dev` |
+| Resume PDF | HTML templates (Classic/Compact) → Chromium on Vercel (`api/render-resume-pdf.ts` via `@sparticuz/chromium-min` + remote pack); local Vite middleware uses full `puppeteer` |
 | Hosting | Vercel (SPA + `/api` Node functions) + Supabase (Postgres, Storage, Deno Edge Functions) |
 | AI | Edge Functions for resume analysis/rewrite/tailor and company prep. Embeddings via OpenAI. Default client provider is mock unless `VITE_AI_PROVIDER=edge` — see §4 and §8 |
 
@@ -777,7 +777,7 @@ byte-identical.
 
 ## 9. Deploying
 
-Push to `main`; Vercel builds and publishes. The SPA lives in `dist/`; **`api/render-resume-pdf.ts` is a Vercel serverless function** (Node + `@sparticuz/chromium` + `puppeteer-core`) that turns HTML templates into PDF. `vercel.json` rewrites exclude `/api/*` so the SPA catch-all does not swallow the route. Local `npm run dev` serves the same path via a Vite middleware using full `puppeteer`.
+Push to `main`; Vercel builds and publishes. The SPA lives in `dist/`; **`api/render-resume-pdf.ts` is a Vercel serverless function** (Node + `@sparticuz/chromium-min` + `puppeteer-core`) that turns HTML templates into PDF. `vercel.json` rewrites exclude `/api/*` so the SPA catch-all does not swallow the route. Local `npm run dev` serves the same path via a Vite middleware using full `puppeteer`.
 
 **Edge Functions deploy separately.** Vercel knows nothing about them, and a push to
 `main` does not ship them:
@@ -822,7 +822,17 @@ Six things a new environment needs:
 
 Things that have already cost time, or will.
 
-- **Resume PDF is a Vercel Node function, not an Edge Function.** `@sparticuz/chromium` + `puppeteer-core` under `api/render-resume-pdf.ts`. Auth is the caller's Supabase JWT; body is `{ templateId, fields }` already owned by the client. `vercel.json` must exclude `/api` from the SPA rewrite. Locally, Vite middleware in `vite.config.ts` uses full `puppeteer`.
+- **Resume PDF is a Vercel Node function, not an Edge Function.** `api/render-resume-pdf.ts`
+  uses `puppeteer-core` + `@sparticuz/chromium-min` (not the full chromium package). The
+  full `@sparticuz/chromium` binary is too large for Vercel's function budget and crashed
+  every request with `FUNCTION_INVOCATION_FAILED` — including unauthenticated ones — so the
+  UI only ever showed "Could not render the PDF." The -min package downloads
+  `chromium-v147.0.0-pack.x64.tar` from GitHub on cold start (`CHROMIUM_PACK_URL` to override).
+  Auth is the caller's Supabase JWT; body is `{ templateId, fields }`. The route reads
+  `VITE_SUPABASE_PUBLISHABLE_KEY` (same as the SPA) — looking only for `*_ANON_KEY` left
+  it "not configured" after the crash was fixed. `vercel.json` must exclude `/api` from the
+  SPA rewrite; give the function ≥1.5 GB memory. Locally, Vite middleware uses full
+  `puppeteer` (a devDependency).
 - **"Download PDF" 500s locally with "Could not find Chrome".** Installing the
   `puppeteer` package does not guarantee its browser: the post-install download is
   skipped whenever `PUPPETEER_SKIP_DOWNLOAD` is set or the install ran with a redirected

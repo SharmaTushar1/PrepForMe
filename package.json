@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "description": "PrepFor.Me (Job Copilot) — prepare deeply, apply with intent. A war room for high-intent job applications.",
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -11,10 +14,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sparticuz/chromium": "^147.0.0",
+    "@sparticuz/chromium-min": "^147.0.0",
     "@supabase/supabase-js": "^2.109.0",
     "@tanstack/react-query": "^5.101.4",
-    "puppeteer": "^24.43.1",
     "puppeteer-core": "^24.43.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -26,6 +28,7 @@
     "@types/react-dom": "^18.3.1",
     "@vercel/node": "^5.9.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "puppeteer": "^24.43.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   }

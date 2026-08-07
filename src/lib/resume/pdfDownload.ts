@@ -41,11 +41,13 @@ export async function downloadResumePdf(
 
   if (!response.ok) {
     let message = "Could not render the PDF.";
+    const text = await response.text();
     try {
-      const body = (await response.json()) as { error?: string };
+      const body = JSON.parse(text) as { error?: string };
       if (body.error) message = body.error;
     } catch {
-      /* keep default */
+      const trimmed = text.trim();
+      if (trimmed && trimmed.length < 300) message = trimmed;
     }
     throw new Error(message);
   }

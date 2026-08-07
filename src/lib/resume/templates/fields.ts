@@ -1,4 +1,4 @@
-import type { ParsedResume } from "../../ai";
+import type { ParsedResume } from "../../ai/types";
 import type {
   Experience,
   Profile,

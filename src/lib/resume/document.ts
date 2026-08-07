@@ -1,4 +1,4 @@
-import type { ParsedResume, ParsedResumeEntry } from "../ai";
+import type { ParsedResume, ParsedResumeEntry } from "../ai/types";
 
 /**
  * The one description of what a rebuilt resume contains, in what order.

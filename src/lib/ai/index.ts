@@ -10,8 +10,12 @@ import type { AiProvider } from "./types";
  * per environment. An unset, misspelled, or stale variable therefore costs
  * nothing rather than silently billing a dev machine.
  */
+// Optional-chain: this barrel must stay safe if a server route ever loads it.
+// Vite always defines `import.meta.env`; plain Node does not.
 export const ai: AiProvider =
-  import.meta.env.VITE_AI_PROVIDER === "edge" ? edgeAiProvider : mockAiProvider;
+  import.meta.env?.VITE_AI_PROVIDER === "edge"
+    ? edgeAiProvider
+    : mockAiProvider;
 
 export { ATS_CATEGORY_IDS, ATS_LAYOUTS } from "./types";
 

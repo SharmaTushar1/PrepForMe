@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { ResumeFields, ResumeTemplateId } from "../src/types";
 import { isResumeTemplateId } from "../src/lib/resume/templates/fields";
 import { renderTemplateToHtml } from "../src/lib/resume/templates/render";
+import path from "node:path";
 
 /**
  * POST /api/render-resume-pdf
@@ -11,6 +12,11 @@ import { renderTemplateToHtml } from "../src/lib/resume/templates/render";
  *
  * Renders HTML via shared templates, then Chromium → PDF.
  * No LLM. Fields must already belong to the caller (client sends owned data).
+ *
+ * Production uses `@sparticuz/chromium-min` and downloads the matching x64 pack
+ * at cold start — the full `@sparticuz/chromium` binary blows past Vercel's
+ * function size budget and fails with FUNCTION_INVOCATION_FAILED before the
+ * handler can even return 401.
  */
 
 export const config = {
@@ -18,19 +24,47 @@ export const config = {
   maxDuration: 60,
 };
 
+/** Must match the installed `@sparticuz/chromium-min` major.minor.patch. */
+const CHROMIUM_PACK_URL =
+  process.env.CHROMIUM_PACK_URL ??
+  "https://github.com/Sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.x64.tar";
+
 function jsonError(res: VercelResponse, status: number, error: string) {
   res.status(status).json({ error });
 }
 
+function supabaseKey(): string | undefined {
+  return (
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY
+  );
+}
+
 async function launchBrowser() {
-  const isVercel = !!process.env.VERCEL;
+  const isVercel = !!(process.env.VERCEL || process.env.VERCEL_ENV);
   if (isVercel) {
-    const chromium = (await import("@sparticuz/chromium")).default;
+    // Must be set before the chromium module evaluates (it reads this at import).
+    if (!process.env.AWS_LAMBDA_JS_RUNTIME) {
+      process.env.AWS_LAMBDA_JS_RUNTIME = "nodejs20.x";
+    }
+    const chromium = (await import("@sparticuz/chromium-min")).default;
     const puppeteer = await import("puppeteer-core");
+    if (typeof chromium.setGraphicsMode === "function") {
+      chromium.setGraphicsMode(false);
+    }
+    const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
+    process.env.LD_LIBRARY_PATH = [
+      path.dirname(executablePath),
+      process.env.LD_LIBRARY_PATH,
+    ]
+      .filter(Boolean)
+      .join(":");
     return puppeteer.default.launch({
       args: chromium.args,
       defaultViewport: { width: 1280, height: 720 },
-      executablePath: await chromium.executablePath(),
+      executablePath,
       headless: true,
     });
   }
@@ -71,8 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!token) return jsonError(res, 401, "Sign in to render a resume PDF.");
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-  const supabaseAnon =
-    process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+  const supabaseAnon = supabaseKey();
   if (!supabaseUrl || !supabaseAnon) {
     return jsonError(res, 500, "Resume PDF is not configured on this host.");
   }

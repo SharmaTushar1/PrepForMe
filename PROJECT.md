@@ -5,7 +5,7 @@
 **Live:** https://prep-for-me.vercel.app/ (currently a basic CRUD skeleton — build in progress)
 **Stage:** pre-v1, targeting 10–20 friends-and-family testers.
 **Technical detail:** [TECHNICAL.md](TECHNICAL.md) — stack, schema, hosting, deploy, gotchas.
-**Last updated:** 6 Aug 2026 (follow-up edit on tailored resume)
+**Last updated:** 7 Aug 2026 (prod PDF render fix)
 
 ---
 
@@ -211,6 +211,7 @@ Prep over volume; truthful by design; human always acts (never auto-submits/send
 
 *Major changes only, going forward.*
 
+- **7 Aug 2026 — Prod PDF download was dead on arrival.** `/api/render-resume-pdf` returned Vercel's `FUNCTION_INVOCATION_FAILED` (text/plain) for every call — the UI mapped that to "Could not render the PDF." Cause: shipping full `@sparticuz/chromium` blew the serverless size budget so the function never booted. Switched to `@sparticuz/chromium-min` + remote x64 pack; also read `VITE_SUPABASE_PUBLISHABLE_KEY` (the route had been looking for a non-existent `*_ANON_KEY`).
 - **6 Aug 2026 — Follow-up edit on a tailored resume.** Materials gets a free-text "Tweak this version" box after fields exist. `tailor-resume` `mode: "edit"` + `constrainEdit` apply only instruction-named fields; does not re-tailor for the JD. Same `tailor` quota with confirm. Contact mismatches vs spine are soft so deliberate email/phone edits can still download.
 - **5 Aug 2026 — Tailor spine gap closed + relevance weighting.** Migration `0011`: profile `phone`/`location`/`links`/`summary` plus `education`/`projects`/`certifications` (with line children). Onboarding confirm writes those sections; `loadSpine` queries them (with `resume_reports.parsed` fallback for older accounts). `TAILOR_SYSTEM` now weighs must-have vs nice-to-have per item, never by section, and logs omissions in `changes`; enrich briefs add only.
 - **5 Aug 2026 — Tailor session persists on the application.** Leaving Materials mid–skill-gap (or after) used to drop summary/prompts from React state even though fields were saved, which pushed people to re-tailor and re-spend. `tailored_resume` now stores an envelope (fields + session); Re-tailor alone spends again, with a confirm.

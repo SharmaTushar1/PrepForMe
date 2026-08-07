@@ -1,4 +1,4 @@
-import type { ParsedResume, ParsedResumeEntry, ResumeEdit } from "../ai";
+import type { ParsedResume, ParsedResumeEntry, ResumeEdit } from "../ai/types";
 
 /**
  * Substituting accepted rewrites into a parse.

@@ -133,7 +133,14 @@ gotcha in [§10](TECHNICAL.md#10-gotchas).
 
 ## Not built yet
 
-Resume upload and parsing, real LLM calls, Discover's job-feed queries, the browser
-extension, Practice, and drag-and-drop on the kanban board. Each of these says so on
-screen instead of pretending. See [PROJECT.md](PROJECT.md) for what's planned and in
-what order.
+Resume upload and parsing, real LLM calls, Discover's job-feed queries, Practice, and
+drag-and-drop on the kanban board. Each of these says so on screen instead of
+pretending. See [PROJECT.md](PROJECT.md) for what's planned and in what order.
+
+## Browser extension
+
+A first version lives in [`extension/`](extension/README.md) — tailors your resume to
+the job posting in the current tab and autofills the application, using this app's own
+Supabase auth and Edge Functions. Real field-mapping so far covers Greenhouse plus a
+label-matching fallback for other sites; LinkedIn, Workday, and Lever are not mapped
+yet. See its own README for setup.

@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "PrepFor.Me — Resume Tailor & Autofill",
+  "short_name": "PrepFor.Me",
+  "version": "0.1.0",
+  "description": "Tailor your resume to the job posting you're on and autofill the application. You review every field — nothing is ever submitted for you.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "PrepFor.Me — tailor & autofill this page",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://*.supabase.co/*",
+    "http://127.0.0.1:54321/*",
+    "http://localhost:54321/*",
+    "https://prep-for-me.vercel.app/*",
+    "http://localhost:5173/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://prep-for-me.vercel.app/*",
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*"
+      ],
+      "js": ["content-bridge.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "exclude_matches": [
+        "https://prep-for-me.vercel.app/*",
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*"
+      ],
+      "js": ["content-panel.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

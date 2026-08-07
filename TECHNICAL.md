@@ -824,15 +824,15 @@ Things that have already cost time, or will.
 
 - **Resume PDF is a Vercel Node function, not an Edge Function.** `api/render-resume-pdf.ts`
   uses `puppeteer-core` + `@sparticuz/chromium-min` (not the full chromium package). The
-  full `@sparticuz/chromium` binary is too large for Vercel's function budget and crashed
-  every request with `FUNCTION_INVOCATION_FAILED` — including unauthenticated ones — so the
-  UI only ever showed "Could not render the PDF." The -min package downloads
-  `chromium-v147.0.0-pack.x64.tar` from GitHub on cold start (`CHROMIUM_PACK_URL` to override).
-  Auth is the caller's Supabase JWT; body is `{ templateId, fields }`. The route reads
-  `VITE_SUPABASE_PUBLISHABLE_KEY` (same as the SPA) — looking only for `*_ANON_KEY` left
-  it "not configured" after the crash was fixed. `vercel.json` must exclude `/api` from the
-  SPA rewrite; give the function ≥1.5 GB memory. Locally, Vite middleware uses full
-  `puppeteer` (a devDependency).
+  full `@sparticuz/chromium` binary is too large for Vercel's function budget. The -min
+  package downloads `chromium-v147.0.0-pack.x64.tar` from GitHub on cold start
+  (`CHROMIUM_PACK_URL` to override). **Do not import from `../src/` in this route** — with
+  root `"type": "module"`, Vercel runs the function as ESM and extensionless `src/` imports
+  crash the isolate at boot (`FUNCTION_INVOCATION_FAILED`, even for unauthenticated calls).
+  The HTML renderer is inlined in `api/render-resume-pdf.ts` (no relative imports into `src/`).
+  Auth uses `VITE_SUPABASE_PUBLISHABLE_KEY`. Give the function ≥1.5 GB memory. Locally, Vite
+  middleware uses full `puppeteer` (a devDependency) and still imports from `src/`.
+  `api/ping.ts` is a zero-dependency probe to distinguish boot failures from Chromium failures.
 - **"Download PDF" 500s locally with "Could not find Chrome".** Installing the
   `puppeteer` package does not guarantee its browser: the post-install download is
   skipped whenever `PUPPETEER_SKIP_DOWNLOAD` is set or the install ran with a redirected

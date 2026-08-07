@@ -32,3 +32,6 @@ export const trustedAppOrigins = (
   .filter(Boolean);
 
 export const isConfigured = Boolean(url && publishableKey);
+
+/** The first trusted origin's login page — what the "sign in" screen links out to. */
+export const signInUrl = `${(trustedAppOrigins[0] ?? "https://prep-for-me.vercel.app").replace(/\/+$/, "")}/login`;

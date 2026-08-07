@@ -21,6 +21,7 @@ import type {
 } from "../lib/types";
 import { Badge, Button, ErrorNote, Label, Spinner, TextArea, TextInput } from "./ui";
 import { colors, font } from "./theme";
+import { signInUrl } from "../lib/config";
 
 type Step =
   | "checking"
@@ -328,11 +329,20 @@ function SignedOutPanel({ onRetry }: { onRetry: () => void }) {
     <div style={{ textAlign: "center", padding: "20px 4px" }}>
       <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 6 }}>Sign in to PrepFor.Me first</div>
       <p style={{ fontSize: 12.5, color: colors.textMuted, lineHeight: 1.55, margin: "0 0 16px" }}>
-        Open your PrepFor.Me tab and sign in there — this panel reuses that session, so nothing needs to be typed here.
+        Sign in there once — this panel reuses that session, so nothing needs to be typed here.
       </p>
-      <Button variant="outline" size="sm" onClick={onRetry}>
-        I've signed in — check again
+      <Button
+        size="sm"
+        style={{ marginBottom: 8 }}
+        onClick={() => window.open(signInUrl, "_blank", "noopener,noreferrer")}
+      >
+        Open PrepFor.Me to sign in
       </Button>
+      <div>
+        <Button variant="ghost" size="sm" onClick={onRetry}>
+          I've signed in — check again
+        </Button>
+      </div>
     </div>
   );
 }

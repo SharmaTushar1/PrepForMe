@@ -389,6 +389,25 @@ async function launchBrowser() {
   }
 }
 
+async function assertSignedIn(
+  supabaseUrl: string,
+  anonKey: string,
+  accessToken: string,
+): Promise<boolean> {
+  // Plain Auth HTTP — do not use @supabase/supabase-js here. Creating that
+  // client spins up Realtime, which on Node 20 without `ws` throws
+  // "Node.js 20 detected without native WebSocket support" and kills the PDF.
+  const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/user`, {
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (!response.ok) return false;
+  const body = (await response.json()) as { id?: string };
+  return typeof body.id === "string" && body.id.length > 0;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === "OPTIONS") {
@@ -419,14 +438,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return jsonError(res, 500, "Resume PDF is not configured on this host.");
     }
 
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(supabaseUrl, supabaseAnon, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: userData, error: userError } =
-      await supabase.auth.getUser(token);
-    if (userError || !userData.user) {
+    if (!(await assertSignedIn(supabaseUrl, supabaseAnon, token))) {
       return jsonError(res, 401, "Your session expired. Sign in again.");
     }
 

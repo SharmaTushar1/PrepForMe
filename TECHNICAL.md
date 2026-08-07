@@ -830,7 +830,9 @@ Things that have already cost time, or will.
   root `"type": "module"`, Vercel runs the function as ESM and extensionless `src/` imports
   crash the isolate at boot (`FUNCTION_INVOCATION_FAILED`, even for unauthenticated calls).
   The HTML renderer is inlined in `api/render-resume-pdf.ts` (no relative imports into `src/`).
-  Auth uses `VITE_SUPABASE_PUBLISHABLE_KEY`. Give the function ≥1.5 GB memory. Locally, Vite
+  Auth is a plain `GET /auth/v1/user` fetch — never `@supabase/supabase-js` in this route
+  (that client boots Realtime and dies on Node 20 without native WebSocket / `ws`).
+  Key: `VITE_SUPABASE_PUBLISHABLE_KEY`. Give the function ≥1.5 GB memory. Locally, Vite
   middleware uses full `puppeteer` (a devDependency) and still imports from `src/`.
   `api/ping.ts` is a zero-dependency probe to distinguish boot failures from Chromium failures.
 - **"Download PDF" 500s locally with "Could not find Chrome".** Installing the

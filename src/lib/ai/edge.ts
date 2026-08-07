@@ -1,21 +1,27 @@
 import { functionsUrl, supabase, supabaseKey } from "../supabase";
+import type { ResumeFields } from "../../types";
 import { mockAiProvider } from "./mock";
 import type {
   AiProvider,
   AnalysisProgress,
   AnalyzeResumeOptions,
+  EditTailoredResumeInput,
+  EditTailoredResumeResult,
+  EnrichSkillGapsInput,
   ImproveResumeOptions,
   ParsedResume,
   PrepAnswer,
   ResumeAnalysis,
   ResumeEdit,
   ResumeImprovement,
+  TailorInput,
+  TailoringResult,
 } from "./types";
 
 /**
  * The hosted provider, selected by `VITE_AI_PROVIDER=edge`.
  *
- * Resume: `analyze-resume`, `improve-resume`. Prep: `prep-chat` (multi-turn —
+ * Resume: `analyze-resume`, `improve-resume`, `tailor-resume`. Prep: `prep-chat` (multi-turn —
  * client sends recent history; claims are re-retrieved each turn), plus ingest /
  * save via `src/data/prep.ts`. Remaining surfaces still delegate to the mock,
  * method by method rather than by spreading, so adding a capability to
@@ -53,7 +59,79 @@ export const edgeAiProvider: AiProvider = {
   name: "edge",
   supportsResumeParsing: true,
 
-  tailorResume: (input) => mockAiProvider.tailorResume(input),
+  async tailorResume(input: TailorInput): Promise<TailoringResult> {
+    const response = await fetch(`${functionsUrl}/tailor-resume`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        apikey: supabaseKey,
+        Authorization: `Bearer ${await accessToken()}`,
+      },
+      body: JSON.stringify({
+        mode: "tailor",
+        applicationId: input.application.id,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await refusalMessage(response, "resume tailor"));
+    }
+    const payload = (await response.json()) as TailoringResult;
+    if (!payload.fields || !Array.isArray(payload.missingSkills)) {
+      throw new Error("The tailor response was incomplete.");
+    }
+    return payload;
+  },
+
+  async enrichSkillGaps(input: EnrichSkillGapsInput): Promise<ResumeFields> {
+    const response = await fetch(`${functionsUrl}/tailor-resume`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        apikey: supabaseKey,
+        Authorization: `Bearer ${await accessToken()}`,
+      },
+      body: JSON.stringify({
+        mode: "enrich",
+        applicationId: input.application.id,
+        fields: input.fields,
+        briefs: input.briefs,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await refusalMessage(response, "skill-gap enrich"));
+    }
+    const payload = (await response.json()) as { fields?: ResumeFields };
+    if (!payload.fields) {
+      throw new Error("The skill-gap response was incomplete.");
+    }
+    return payload.fields;
+  },
+
+  async editTailoredResume(input: EditTailoredResumeInput) {
+    const response = await fetch(`${functionsUrl}/tailor-resume`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        apikey: supabaseKey,
+        Authorization: `Bearer ${await accessToken()}`,
+      },
+      body: JSON.stringify({
+        mode: "edit",
+        applicationId: input.application.id,
+        fields: input.fields,
+        instruction: input.instruction,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await refusalMessage(response, "resume edit"));
+    }
+    const payload = (await response.json()) as EditTailoredResumeResult;
+    if (!payload.fields) {
+      throw new Error("The edit response was incomplete.");
+    }
+    return payload;
+  },
+
   atsGap: (input) => mockAiProvider.atsGap(input),
   draftReferralNote: (input) => mockAiProvider.draftReferralNote(input),
   suggestReferrals: (input) => mockAiProvider.suggestReferrals(input),

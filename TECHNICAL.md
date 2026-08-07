@@ -4,7 +4,7 @@
 [PROJECT.md](PROJECT.md), which holds strategy, scope, and decisions. Update this file
 whenever the stack, schema, hosting, or environment changes.*
 
-**Last updated:** 5 Aug 2026
+**Last updated:** 6 Aug 2026
 
 ---
 
@@ -13,16 +13,16 @@ whenever the stack, schema, hosting, or environment changes.*
 | Concern | Choice |
 | --- | --- |
 | UI | React 18.3 + TypeScript 5.6, strict mode |
-| Build | Vite 5.4 (`@vitejs/plugin-react`), single static bundle |
+| Build | Vite 5.4 (`@vitejs/plugin-react`), SPA + Vercel `/api` Node functions |
 | Routing | React Router 7 (`BrowserRouter`) |
 | Server state | TanStack Query 5 |
 | Backend | Supabase — Postgres, PostgREST Data API, GoTrue auth, Storage, Edge Functions |
-| Auth | Magic link (email OTP), no passwords |
+| Auth | Magic link + Google OAuth (no passwords) |
 | Files | Private Storage buckets `resumes` and `prep-sources` — see §6 |
 | Styling | No UI framework. Inline style strings parsed by [`src/css.ts`](src/css.ts), plus a small [`src/index.css`](src/index.css) for form-control resets |
-| Documents | DOCX and PDF written by hand in the browser, no library, no server — see §11 |
-| Hosting | Vercel (static) + Supabase (managed Postgres, Storage, Deno functions) |
-| AI | Edge Functions for resume analysis/rewrite and company prep (ingest, chat, save claims). Embeddings via OpenAI `text-embedding-3-small`. Default client provider is mock unless `VITE_AI_PROVIDER=edge` — see §4 and §8 |
+| Resume PDF | HTML templates (Classic/Compact) → Chromium on Vercel (`api/render-resume-pdf.ts`); local Vite middleware for `npm run dev` |
+| Hosting | Vercel (SPA + `/api` Node functions) + Supabase (Postgres, Storage, Deno Edge Functions) |
+| AI | Edge Functions for resume analysis/rewrite/tailor and company prep. Embeddings via OpenAI. Default client provider is mock unless `VITE_AI_PROVIDER=edge` — see §4 and §8 |
 
 There is no test suite, no CI, and no linter — no `lint` script, no ESLint
 dependency, no config. `npm run build` runs `tsc --noEmit && vite build`, so type
@@ -332,8 +332,11 @@ Files in [`supabase/migrations/`](supabase/migrations), applied in filename orde
 | `0006_ai_quota.sql` | `ai_usage` attempts ledger, and narrowed `user_settings` grants so `plan` is not self-service |
 | `0007_prep_corpus.sql` | `vector` extension, `applications.company_domain`, `prep_chunks` + HNSW + `match_prep_chunks`, `prep-sources` bucket, prep_sources scope/input columns, `relevance_check` on `ai_usage` |
 | `0008_catalog.sql` | `catalog_levels` / `companies` / `roles` / `role_aliases` / `requests`; `applications` FKs + specialty + employment_type |
+| `0009_resume_templates.sql` | `profiles.default_template_id`, `applications.template_id` + `tailored_resume` jsonb (fields, later also session envelope — no schema change) |
+| `0010_ai_usage_tailor.sql` | `tailor` added to the `ai_usage` feature check, which `0009` should have widened |
+| `0011_profile_sections.sql` | `profiles` phone/location/links/summary; `education`/`projects`/`certifications` (+ line children), RLS, grants |
 
-`0001`–`0007` are applied to the hosted project (history repaired 5 Aug so `db push` could land `0007`). **`0008` is applied locally; push to hosted before relying on catalog FKs in production.** Local and hosted both have `prep_chunks`, the `prep-sources` bucket, and `relevance_check` on `ai_usage`.
+`0001`–`0011` are applied both locally and to the hosted project (history repaired 5 Aug so `db push` could land `0007`).
 
 **The hosted ledger is not to be trusted, and this has already bitten.** Several migrations
 were applied there by hand — SQL Editor and the Management API — so
@@ -774,13 +777,7 @@ byte-identical.
 
 ## 9. Deploying
 
-Push to `main`; Vercel builds and publishes. The build is fast because there's genuinely
-little to do — 188 modules, one bundle, no SSR, no Vercel functions, no image
-optimisation, and type checking is the slowest step.
-
-Current output is a single **719 kB (199 kB gzipped)** chunk. Vite warns about the size.
-No code splitting yet; the obvious first cut is lazy-loading the app shell away from the
-landing page.
+Push to `main`; Vercel builds and publishes. The SPA lives in `dist/`; **`api/render-resume-pdf.ts` is a Vercel serverless function** (Node + `@sparticuz/chromium` + `puppeteer-core`) that turns HTML templates into PDF. `vercel.json` rewrites exclude `/api/*` so the SPA catch-all does not swallow the route. Local `npm run dev` serves the same path via a Vite middleware using full `puppeteer`.
 
 **Edge Functions deploy separately.** Vercel knows nothing about them, and a push to
 `main` does not ship them:
@@ -788,6 +785,7 @@ landing page.
 ```bash
 supabase functions deploy analyze-resume
 supabase functions deploy improve-resume
+supabase functions deploy tailor-resume
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
 ```
 
@@ -824,6 +822,46 @@ Six things a new environment needs:
 
 Things that have already cost time, or will.
 
+- **Resume PDF is a Vercel Node function, not an Edge Function.** `@sparticuz/chromium` + `puppeteer-core` under `api/render-resume-pdf.ts`. Auth is the caller's Supabase JWT; body is `{ templateId, fields }` already owned by the client. `vercel.json` must exclude `/api` from the SPA rewrite. Locally, Vite middleware in `vite.config.ts` uses full `puppeteer`.
+- **"Download PDF" 500s locally with "Could not find Chrome".** Installing the
+  `puppeteer` package does not guarantee its browser: the post-install download is
+  skipped whenever `PUPPETEER_SKIP_DOWNLOAD` is set or the install ran with a redirected
+  `PUPPETEER_CACHE_DIR`, and the only symptom is a 500 from `/api/render-resume-pdf` while
+  the HTML preview renders perfectly. Fix with `npx puppeteer browsers install chrome`
+  (into `~/.cache/puppeteer`, not a temp cache), or point `PUPPETEER_EXECUTABLE_PATH` at a
+  Chrome you already have. The middleware now tries the bundled browser, then the
+  installed `chrome` channel, then that variable before failing with that instruction.
+- **A new metered feature is two edits, not one.** Adding a value to the `Feature` union in
+  `_shared/plans.ts` is not enough: `ai_usage.feature` has a check constraint listing them,
+  so the first real run dies in `spendAllowance` with `23514` and the user sees the generic
+  "Could not start this. Please try again." — the logs name the constraint, the UI never
+  does. `0010` had to retrofit `tailor` for exactly this reason.
+- **`applications.tailored_resume` is an envelope, not bare fields.** Writes include
+  `{ fields, summary, changes, keywords, missingSkills, variant, briefs }` so Materials can
+  restore without calling `tailor-resume` again. Legacy rows that are bare `ResumeFields`
+  still parse; the next successful tailor upgrades them. Opening the tab must never spend.
+- **Tailor spine used to hardcode education/projects/certs/location/links empty.** The
+  analyze pass already extracted them; onboarding discarded them because the profile had
+  nowhere to store them. `0011` adds the columns/tables; `loadSpine` queries them and falls
+  back to `resume_reports.parsed` when tables are still empty so existing accounts are not
+  blank until they re-confirm a parse.
+- **Contact facts are pinned in code, not trusted to the prompt.** Tailor used to swap the
+  login email onto the PDF and drop phone/links. `pinSpineFacts` (edge + client) overwrites
+  fullName/email/phone/location/links and employer/title/dates from the spine after every
+  tailor/enrich model call — but **not** after `mode: "edit"`, where the user may
+  deliberately change contact. `loadSpine` prefers the base-parse contact over `profiles.email`
+  (which is often the auth address). Phone only appears if the parse captured it — re-analyze
+  after `0011` if an older report has `phone: null`.
+- **`tailor-resume` has three modes.** Default = full JD tailor; `enrich` = skill-gap briefs;
+  `edit` = follow-up instruction only. `constrainEdit` copies current fields and only lets
+  through sections the instruction named (email, headline, bullet, …), so a chatty model
+  cannot re-tailor the whole document. Edit and re-tailor both spend the `tailor` allowance.
+- **`?? []` in a shared hook is an infinite render loop.** `useProfileContext` returned a
+  fresh `[]` for `experiences`/`skills` while the queries were in flight, so every consumer
+  keying an effect on `context.experiences` re-ran on each render and re-set state —
+  "Maximum update depth exceeded" pointing at the *consumer*, which is the wrong file to
+  debug. Fallbacks in hooks that hand arrays to effect dependency lists must be shared
+  module constants.
 - **42501 on every query** — missing grants, not RLS. See §7.
 - **Magic link redirects to the wrong place.** `Login.tsx` requests
   `emailRedirectTo: ${origin}/app`. If that URL isn't in the Supabase redirect allow

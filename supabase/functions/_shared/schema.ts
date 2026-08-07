@@ -141,6 +141,7 @@ export interface ParsedResume {
   fullName: string | null;
   headline: string | null;
   email: string | null;
+  phone: string | null;
   location: string | null;
   /** The opening summary or objective paragraph, verbatim. Null when absent. */
   summary: string | null;
@@ -494,6 +495,7 @@ const parsedResumeSchema: JsonSchema = {
     "fullName",
     "headline",
     "email",
+    "phone",
     "location",
     "summary",
     "links",
@@ -511,6 +513,10 @@ const parsedResumeSchema: JsonSchema = {
         "The professional title the resume presents, e.g. a line under the name or the current role. Null if the resume states none.",
     },
     email: { type: ["string", "null"] },
+    phone: {
+      type: ["string", "null"],
+      description: "As written on the resume. Null if absent.",
+    },
     location: {
       type: ["string", "null"],
       description: "As written on the resume, e.g. \"Bengaluru, India\".",

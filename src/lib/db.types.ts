@@ -16,10 +16,15 @@ export interface ProfileRow {
   full_name: string | null;
   headline: string | null;
   email: string | null;
+  phone: string | null;
+  location: string | null;
+  links: { label: string; url: string }[] | null;
+  summary: string | null;
   notice_period: string | null;
   work_authorization: string | null;
   salary_expectation: string | null;
   base_resume_id: string | null;
+  default_template_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -70,6 +75,69 @@ export interface SkillRow {
   created_at: string;
 }
 
+export interface EducationRow {
+  id: string;
+  user_id: string;
+  title: string;
+  organization: string;
+  date_range: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EducationLineRow {
+  id: string;
+  user_id: string;
+  education_id: string;
+  text: string;
+  enabled: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface ProjectRow {
+  id: string;
+  user_id: string;
+  title: string;
+  organization: string;
+  date_range: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectLineRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  text: string;
+  enabled: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface CertificationRow {
+  id: string;
+  user_id: string;
+  title: string;
+  organization: string;
+  date_range: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CertificationLineRow {
+  id: string;
+  user_id: string;
+  certification_id: string;
+  text: string;
+  enabled: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
 export type EmploymentTypeRow = "full_time" | "contract" | "intern" | "other";
 
 export interface ApplicationRow {
@@ -86,6 +154,8 @@ export interface ApplicationRow {
   level_id: string | null;
   specialty: string | null;
   employment_type: EmploymentTypeRow | null;
+  tailored_resume: unknown | null;
+  template_id: string | null;
   job_description: string | null;
   next_action: string | null;
   next_action_at: string | null;

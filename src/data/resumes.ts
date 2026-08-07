@@ -8,6 +8,7 @@ import type {
   AnalysisProgress,
   AtsReport,
   ParsedResume,
+  ParsedResumeEntry,
   ParsedResumeExperience,
   ResumeAnalysis,
 } from "../lib/ai";
@@ -21,6 +22,7 @@ import {
   useDeleteExperience,
   useExperiences,
   useProfile,
+  useReplaceSectionEntries,
   useSkills,
   useUpdateProfile,
 } from "./profile";
@@ -425,7 +427,15 @@ export interface ApplyParsedResumeInput {
   /** Written only when the user left it ticked; blank strings are ignored. */
   fullName?: string | null;
   headline?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  location?: string | null;
+  summary?: string | null;
+  links?: { label: string; url: string }[];
   experiences: ParsedResumeExperience[];
+  education?: ParsedResumeEntry[];
+  projects?: ParsedResumeEntry[];
+  certifications?: ParsedResumeEntry[];
   skills: string[];
 }
 
@@ -436,6 +446,9 @@ export interface ApplyParsedResumeResult {
   /** Skills the profile already had, matched case-insensitively and left alone. */
   skillsAlreadyThere: number;
   rolesRemoved: number;
+  educationAdded: number;
+  projectsAdded: number;
+  certificationsAdded: number;
 }
 
 /**
@@ -456,6 +469,9 @@ export function useApplyParsedResume() {
   const deleteExperience = useDeleteExperience();
   const createBullet = useCreateBullet();
   const addSkill = useAddSkill();
+  const replaceEducation = useReplaceSectionEntries("education");
+  const replaceProjects = useReplaceSectionEntries("projects");
+  const replaceCertifications = useReplaceSectionEntries("certifications");
 
   return useMutation({
     mutationFn: async (input: ApplyParsedResumeInput): Promise<ApplyParsedResumeResult> => {
@@ -465,15 +481,27 @@ export function useApplyParsedResume() {
         skillsAdded: 0,
         skillsAlreadyThere: 0,
         rolesRemoved: 0,
+        educationAdded: 0,
+        projectsAdded: 0,
+        certificationsAdded: 0,
       };
 
       const fullName = input.fullName?.trim();
       const headline = input.headline?.trim();
-      if (fullName || headline) {
-        await updateProfile.mutateAsync({
-          ...(fullName ? { fullName } : {}),
-          ...(headline ? { headline } : {}),
-        });
+      const email = input.email?.trim();
+      const phone = input.phone?.trim();
+      const location = input.location?.trim();
+      const summary = input.summary?.trim();
+      const profilePatch: Parameters<typeof updateProfile.mutateAsync>[0] = {};
+      if (fullName) profilePatch.fullName = fullName;
+      if (headline) profilePatch.headline = headline;
+      if (email) profilePatch.email = email;
+      if (phone) profilePatch.phone = phone;
+      if (location) profilePatch.location = location;
+      if (summary) profilePatch.summary = summary;
+      if (input.links && input.links.length) profilePatch.links = input.links;
+      if (Object.keys(profilePatch).length) {
+        await updateProfile.mutateAsync(profilePatch);
       }
 
       if (input.mode === "replace") {
@@ -506,6 +534,31 @@ export function useApplyParsedResume() {
         }
       }
 
+      const toSection = (entries: ParsedResumeEntry[] | undefined) =>
+        (entries ?? []).map((e) => ({
+          title: e.title,
+          organization: e.organization,
+          dateRange: e.dateRange,
+          lines: e.lines,
+        }));
+
+      // Sections are replace-all on every apply: re-confirming the parse is the
+      // source of truth for education/projects/certs (unlike roles, which can add).
+      if ((input.education ?? []).length || input.mode === "replace") {
+        const edu = await replaceEducation.mutateAsync(toSection(input.education));
+        result.educationAdded = edu.added;
+      }
+      if ((input.projects ?? []).length || input.mode === "replace") {
+        const proj = await replaceProjects.mutateAsync(toSection(input.projects));
+        result.projectsAdded = proj.added;
+      }
+      if ((input.certifications ?? []).length || input.mode === "replace") {
+        const cert = await replaceCertifications.mutateAsync(
+          toSection(input.certifications),
+        );
+        result.certificationsAdded = cert.added;
+      }
+
       const taken = new Set(
         ((await skills.refetch()).data ?? []).map((s) => s.name.trim().toLowerCase()),
       );
@@ -528,6 +581,9 @@ export function useApplyParsedResume() {
       queryClient.invalidateQueries({ queryKey: keys.profile(userId) });
       queryClient.invalidateQueries({ queryKey: keys.experiences(userId) });
       queryClient.invalidateQueries({ queryKey: keys.skills(userId) });
+      queryClient.invalidateQueries({ queryKey: keys.education(userId) });
+      queryClient.invalidateQueries({ queryKey: keys.projects(userId) });
+      queryClient.invalidateQueries({ queryKey: keys.certifications(userId) });
     },
   });
 }

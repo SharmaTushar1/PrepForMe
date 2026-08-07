@@ -8,12 +8,12 @@
 
 ## The one-line answer
 
-**Résumé half works. Company-prep RAG is built and deployed.** Catalog-first company/role/level (typeahead + prep slug keys + LinkedIn currentCompany) shipped locally; apply `0008` on hosted if not yet. What's left before production chat counts as live is **one real end-to-end pass with `VITE_AI_PROVIDER=edge` on Vercel**.
+**Résumé + templates work. Company-prep RAG is built and deployed.** Catalog (`0008`), resume templates (`0009`), tailor allowance (`0010`), and profile sections (`0011`) on hosted. Generate/Tailor PDF via Chromium; `tailor-resume` Edge Function with full spine + weighting. What's left for live MVP is **edge provider on Vercel + deploy `tailor-resume` if not yet**.
 
 ```
 Phase 0 setup ────▓▓▓▓▓▓  DONE — cap set, resume functions deployed
 Phase 1 résumé ───▓▓▓▓▓▓  DONE — analysis, report, rewrites, quota, live
-Phase 2 tailoring ▓░░░░░  UI + mechanical keyword gap only
+Phase 2 tailoring ▓▓▓▓░░  tailor-resume + templates + fidelity; gap still mechanical in mock
 Phase 3 moat/RAG ─▓▓▓▓▓▓  corpus + catalog keys; chat UX fixed
 Phase 4 polish ───░░░░░░  not started
 Phase 5 reach ────░░░░░░  not started
@@ -27,10 +27,11 @@ Phase 5 reach ────░░░░░░  not started
 - Profile, résumé report, rewrites, tracker, Home — as before.
 - **Company prep UI** — paste / URL / PDF sources, domain confirm, Save to prep, provenance chips, multi-turn chat, company-wide sources / shared claims.
 - **Add role** — catalog typeahead for company/role, generic level ladder, specialty + employment type, Custom + request.
+- **Generate / Tailor PDF** — Classic/Compact templates, Chromium PDF, skill-gap briefs, fidelity gate.
 
 ## Still mock (UI present, no model behind it)
 
-- **JD tailoring + ATS keyword gap** (mechanical keywords only for the gap).
+- **ATS keyword gap** (mechanical keywords). Tailor fields + PDF are real when `VITE_AI_PROVIDER=edge`.
 - **Referral drafts** (search URL is real; drafts still mock).
 
 ## Doesn't exist yet

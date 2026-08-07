@@ -1,10 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, unwrap } from "../lib/supabase";
 import type { ApplicationRow, StageEventRow } from "../lib/db.types";
-import type { Application, ApplicationDraft, EmploymentType, Stage } from "../types";
+import type {
+  Application,
+  ApplicationDraft,
+  EmploymentType,
+  ResumeFields,
+  ResumeTemplateId,
+  Stage,
+  TailorSession,
+} from "../types";
 import { STAGES } from "../data";
 import { useSession } from "../auth/SessionProvider";
 import { normaliseCompany } from "../lib/company";
+import {
+  isResumeTemplateId,
+  parseStoredTailored,
+  serializeTailored,
+} from "../lib/resume/templates";
 import { keys } from "./queryKeys";
 
 /**
@@ -32,6 +45,7 @@ function toApplication(
   row: ApplicationWithCounts,
   sourceCount: number = row.prep_sources?.length ?? 0,
 ): Application {
+  const tailored = parseStoredTailored(row.tailored_resume);
   return {
     id: row.id,
     company: row.company,
@@ -46,6 +60,9 @@ function toApplication(
     specialty: row.specialty ?? null,
     employmentType: row.employment_type ?? null,
     linkedinCompanyId: row.catalog_companies?.linkedin_company_id ?? null,
+    templateId: isResumeTemplateId(row.template_id) ? row.template_id : null,
+    tailoredResume: tailored.fields,
+    tailorSession: tailored.session,
     jobDescription: row.job_description,
     nextAction: row.next_action,
     nextActionAt: row.next_action_at,
@@ -198,6 +215,11 @@ export interface ApplicationPatch {
   nextAction?: string | null;
   nextActionAt?: string | null;
   resumeTailored?: boolean;
+  templateId?: ResumeTemplateId | null;
+  /** Fields for the PDF; write with `tailorSession` so the Materials tab can restore. */
+  tailoredResume?: ResumeFields | null;
+  /** Pass with `tailoredResume` (or alone to update briefs / clear skill gaps). */
+  tailorSession?: TailorSession | null;
 }
 
 export function useUpdateApplication() {
@@ -228,6 +250,21 @@ export function useUpdateApplication() {
       if (patch.nextAction !== undefined) payload.next_action = patch.nextAction?.trim() || null;
       if (patch.nextActionAt !== undefined) payload.next_action_at = patch.nextActionAt || null;
       if (patch.resumeTailored !== undefined) payload.resume_tailored = patch.resumeTailored;
+      if (patch.templateId !== undefined) payload.template_id = patch.templateId;
+      if (patch.tailoredResume !== undefined || patch.tailorSession !== undefined) {
+        if (patch.tailoredResume === null) {
+          payload.tailored_resume = null;
+        } else if (patch.tailoredResume !== undefined) {
+          payload.tailored_resume = serializeTailored(
+            patch.tailoredResume,
+            patch.tailorSession ?? null,
+          );
+        } else {
+          // Session-only update: re-wrap existing fields from the row we are about
+          // to overwrite is impossible here, so callers must pass fields too.
+          throw new Error("tailorSession updates require tailoredResume");
+        }
+      }
 
       const row = await unwrap<ApplicationWithCounts>(
         supabase.from("applications").update(payload).eq("id", id).select(SELECT).single(),

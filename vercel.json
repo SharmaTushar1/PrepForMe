@@ -1,3 +1,11 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/render-resume-pdf.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
 }

@@ -19,6 +19,9 @@ export type {
   AiProvider,
   AnalysisProgress,
   AnalyzeResumeOptions,
+  EditTailoredResumeInput,
+  EditTailoredResumeResult,
+  EnrichSkillGapsInput,
   ImproveResumeOptions,
   AtsCategories,
   AtsCategory,
@@ -42,4 +45,5 @@ export type {
   ResumeImprovement,
   TailoringChange,
   TailoringResult,
+  MissingSkillPrompt,
 } from "./types";

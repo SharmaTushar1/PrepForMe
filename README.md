@@ -16,8 +16,8 @@ with every recap you log, and keeps you in charge — nothing is ever auto-submi
 
 ## Stack
 
-React 18 + TypeScript, built with Vite. Supabase for Postgres, magic-link auth, and
-later Edge Functions. TanStack Query for server state, React Router for navigation. No
+React 18 + TypeScript, built with Vite. Supabase for Postgres, magic-link and Google
+auth, and later Edge Functions. TanStack Query for server state, React Router for navigation. No
 UI framework: inline style strings are parsed into React style objects by
 [`src/css.ts`](src/css.ts), so oklch colors and gradients stay exactly as designed.
 
@@ -44,9 +44,38 @@ tells you what's missing — so a blank `.env.local` never crashes anything.
    security is what protects the data.
 4. In **Authentication → URL Configuration**, set the Site URL to
    `http://localhost:5173` and add `http://localhost:5173/**` to the redirect allow list,
-   or magic links will send you somewhere that isn't your dev server.
-5. Sign in at `/login`. The first sign-in creates your account, and a trigger seeds your
+   or magic links / OAuth will send you somewhere that isn't your dev server.
+5. **(Recommended) Google sign-in** — see [Sign-in with Google](#sign-in-with-google) below.
+6. Sign in at `/login`. The first sign-in creates your account, and a trigger seeds your
    `profiles` and `user_settings` rows.
+
+### Sign-in with Google
+
+The login screen offers **Continue with Google**, plus the
+email magic link. You create the OAuth apps; Supabase holds the secrets (never `VITE_`).
+
+**1. Google Cloud Console** → APIs & Services → Credentials → Create OAuth client ID (Web):
+
+- Authorized JavaScript origins: `http://localhost:5173`, `https://prep-for-me.vercel.app`
+- Authorized redirect URIs (both):
+  - Local: `http://127.0.0.1:54321/auth/v1/callback`
+  - Hosted: `https://<PROJECT_REF>.supabase.co/auth/v1/callback`
+
+**2. Hosted Supabase** → Authentication → Providers → enable Google → paste
+client id + secret for each.
+
+**3. Local** — add to `supabase/.env` (or `.env.local` loaded by the CLI; not the Vite
+`.env.local`):
+
+```bash
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=...
+SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET=...
+```
+
+Then `supabase stop && supabase start` so GoTrue picks up `[auth.external.*]` from
+[`supabase/config.toml`](supabase/config.toml).
+
+Redirect allow-list must include `${origin}/app` (already required for magic links).
 
 Scripts:
 

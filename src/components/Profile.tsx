@@ -23,6 +23,7 @@ import {
   useUpdateExperience,
   useUpdateProfile,
 } from "../data/profile";
+import { GenerateResumeCard } from "./resume/GenerateResumeCard";
 import {
   EmptyState,
   ErrorNote,
@@ -140,6 +141,10 @@ export function Profile() {
       <Eyebrow style={{ marginBottom: "12px" }}>Base resume</Eyebrow>
       <div style={css("margin-bottom:22px;")}>
         <BaseResumeCard />
+      </div>
+
+      <div style={css("margin-bottom:22px;")}>
+        <GenerateResumeCard />
       </div>
 
       {/* experience */}

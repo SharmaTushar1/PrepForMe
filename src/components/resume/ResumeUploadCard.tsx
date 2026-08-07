@@ -131,8 +131,8 @@ export function ResumeUploadCard({
           {dragging ? "Drop it here" : "Drop your resume here"}
         </div>
         <p style={css("font-size:13px; color:oklch(0.5 0.015 260); line-height:1.6; margin:0 auto 16px; max-width:400px;")}>
-          PDF only, up to 10 MB. The layout gets read as well as the words — columns, tables and
-          header text are half of what an ATS review is about.
+          PDF only, up to 10 MB. We'll pull your info from this, then you'll generate a clean
+          resume from a template — we don't restyle your original file.
         </p>
         {/*
           No onClick: this sits inside the drop zone, whose own handler opens the

@@ -3,7 +3,9 @@ import type {
   Experience,
   PrepCitation,
   Profile,
+  ProfileSectionEntry,
   Recap,
+  ResumeFields,
   Skill,
 } from "../../types";
 
@@ -13,6 +15,13 @@ export interface TailoringChange {
   after: string;
   rationale: string;
   sourceBulletId?: string;
+}
+
+/** A JD skill the spine doesn't cover — user may brief or skip. */
+export interface MissingSkillPrompt {
+  skill: string;
+  /** Short ask shown above the optional textarea. */
+  prompt: string;
 }
 
 export interface AtsKeyword {
@@ -29,6 +38,10 @@ export interface TailoringResult {
   /** The angle this pass took, e.g. "reliability-led". */
   variant: string | null;
   model: string;
+  /** Structured fields for this application after tailor (before skill-gap briefs). */
+  fields: ResumeFields;
+  /** Skills the JD asks for that the spine doesn't show — elicitation option A. */
+  missingSkills: MissingSkillPrompt[];
 }
 
 export interface ReferralDraft {
@@ -229,6 +242,7 @@ export interface ParsedResume {
   fullName: string | null;
   headline: string | null;
   email: string | null;
+  phone: string | null;
   location: string | null;
   /** The opening summary or objective paragraph, verbatim. Null when absent. */
   summary: string | null;
@@ -332,11 +346,37 @@ export interface ProfileContext {
   profile: Profile | null;
   experiences: Experience[];
   skills: Skill[];
+  education: ProfileSectionEntry[];
+  projects: ProfileSectionEntry[];
+  certifications: ProfileSectionEntry[];
 }
 
 export interface TailorInput {
   application: Application;
   context: ProfileContext;
+}
+
+/** User briefs for missing JD skills — skip by omitting or empty text. */
+export interface EnrichSkillGapsInput {
+  application: Application;
+  context: ProfileContext;
+  fields: ResumeFields;
+  briefs: { skill: string; text: string }[];
+}
+
+/** Follow-up tweak to an already-tailored resume — only what the instruction asks. */
+export interface EditTailoredResumeInput {
+  application: Application;
+  context: ProfileContext;
+  fields: ResumeFields;
+  instruction: string;
+}
+
+export interface EditTailoredResumeResult {
+  summary: string;
+  changes: TailoringChange[];
+  fields: ResumeFields;
+  model: string;
 }
 
 export interface AtsInput {
@@ -424,6 +464,18 @@ export interface AiProvider {
   readonly supportsResumeParsing: boolean;
 
   tailorResume(input: TailorInput): Promise<TailoringResult>;
+  /**
+   * Turn optional user briefs for missing JD skills into a skill chip + 1–2
+   * bullets. Writes only application tailored copy — never the profile spine.
+   */
+  enrichSkillGaps(input: EnrichSkillGapsInput): Promise<ResumeFields>;
+  /**
+   * Apply a free-text follow-up to an already-tailored resume ("change my email
+   * to…", "shorten the first bullet"). Must not re-tailor the whole document.
+   */
+  editTailoredResume(
+    input: EditTailoredResumeInput,
+  ): Promise<EditTailoredResumeResult>;
   atsGap(input: AtsInput): Promise<AtsKeyword[]>;
   draftReferralNote(input: ReferralInput): Promise<string>;
   suggestReferrals(input: SuggestReferralsInput): Promise<ReferralDraft[]>;

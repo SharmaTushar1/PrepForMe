@@ -16,6 +16,56 @@ export type ReferralChannel = "invite" | "message";
 
 export type RecapOutcome = "rough" | "ok" | "went_well";
 
+export type ResumeTemplateId = "classic" | "compact";
+
+/** Structured resume used by templates / tailor — same shape as ParsedResume. */
+export interface ResumeFields {
+  fullName: string | null;
+  headline: string | null;
+  email: string | null;
+  phone: string | null;
+  location: string | null;
+  summary: string | null;
+  links: { label: string; url: string }[];
+  experiences: {
+    title: string;
+    company: string;
+    startDate: string | null;
+    endDate: string | null;
+    bullets: string[];
+  }[];
+  education: {
+    title: string;
+    organization: string;
+    dateRange: string;
+    lines: string[];
+  }[];
+  projects: {
+    title: string;
+    organization: string;
+    dateRange: string;
+    lines: string[];
+  }[];
+  certifications: {
+    title: string;
+    organization: string;
+    dateRange: string;
+    lines: string[];
+  }[];
+  skills: string[];
+}
+
+/** Persisted with tailored fields so Materials can restore without re-calling the model. */
+export interface TailorSession {
+  summary: string;
+  changes: { before: string; after: string; rationale: string }[];
+  keywords: { keyword: string; covered: boolean; hint?: string }[];
+  missingSkills: { skill: string; prompt: string }[];
+  variant: string | null;
+  /** In-progress skill-gap textareas, keyed by skill name. */
+  briefs: Record<string, string>;
+}
+
 // ------------------------------------------------------------------ domain
 
 export type EmploymentType = "full_time" | "contract" | "intern" | "other";
@@ -40,6 +90,15 @@ export interface Application {
   employmentType: EmploymentType | null;
   /** LinkedIn org id from catalog when companyId is set; for referral search. */
   linkedinCompanyId: string | null;
+  /** Override of profile default template; null = use profile default. */
+  templateId: ResumeTemplateId | null;
+  /** Structured fields after tailor; null until tailored. */
+  tailoredResume: ResumeFields | null;
+  /**
+   * Last tailor pass metadata (summary, diffs, skill-gap prompts, drafts).
+   * Stored with `tailored_resume` so leaving Materials does not force a re-spend.
+   */
+  tailorSession: TailorSession | null;
   jobDescription: string | null;
   nextAction: string | null;
   nextActionAt: string | null;
@@ -96,11 +155,17 @@ export interface Profile {
   fullName: string | null;
   headline: string | null;
   email: string | null;
+  phone: string | null;
+  location: string | null;
+  /** Short professional summary from the base resume. */
+  summary: string | null;
+  links: { label: string; url: string }[];
   noticePeriod: string | null;
   workAuthorization: string | null;
   salaryExpectation: string | null;
   /** The upload that counts as this user's canonical resume. */
   baseResumeId: string | null;
+  defaultTemplateId: ResumeTemplateId;
 }
 
 export type ResumeStatus = "uploaded" | "analyzing" | "analyzed" | "failed";
@@ -138,6 +203,24 @@ export interface Experience {
   summary: string | null;
   sortOrder: number;
   bullets: ExperienceBullet[];
+}
+
+/** Education, project, or certification block — dateRange as printed. */
+export interface ProfileSectionEntry {
+  id: string;
+  title: string;
+  organization: string;
+  dateRange: string;
+  sortOrder: number;
+  lines: ProfileSectionLine[];
+}
+
+export interface ProfileSectionLine {
+  id: string;
+  parentId: string;
+  text: string;
+  enabled: boolean;
+  sortOrder: number;
 }
 
 export interface Skill {

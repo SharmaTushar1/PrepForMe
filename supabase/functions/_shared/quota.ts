@@ -162,6 +162,8 @@ function label(feature: Feature): string {
       return "chat";
     case "relevance_check":
       return "relevance check";
+    case "tailor":
+      return "resume tailor";
   }
 }
 

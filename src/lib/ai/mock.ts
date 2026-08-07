@@ -1,10 +1,13 @@
-import type { Experience, PrepCitation, Recap } from "../../types";
+import type { Experience, PrepCitation, Recap, ResumeFields } from "../../types";
+import { fieldsFromProfileSpine, pinSpineFacts } from "../resume/templates";
 import { covers, extractKeywords } from "./keywords";
 import type {
   AiProvider,
   AtsCategories,
   AtsInput,
   AtsKeyword,
+  EditTailoredResumeInput,
+  EnrichSkillGapsInput,
   ParsedResume,
   PrepAnswer,
   PrepQuestionInput,
@@ -62,6 +65,21 @@ function reframe(bullet: string, keyword: string): string {
   return `${label}: ${lowerFirst(bullet.trim())}`;
 }
 
+function applyChangesToFields(
+  fields: ResumeFields,
+  changes: TailoringChange[],
+): ResumeFields {
+  if (!changes.length) return fields;
+  const byBefore = new Map(changes.map((c) => [c.before, c.after]));
+  return {
+    ...fields,
+    experiences: fields.experiences.map((exp) => ({
+      ...exp,
+      bullets: exp.bullets.map((b) => byBefore.get(b) ?? b),
+    })),
+  };
+}
+
 function keywordsIn(text: string, keywords: string[]): string[] {
   return keywords.filter((k) => covers(text, k));
 }
@@ -92,6 +110,7 @@ export const mockAiProvider: AiProvider = {
   async tailorResume({ application, context }: TailorInput): Promise<TailoringResult> {
     const keywords = computeAtsGap({ application, context });
     const covered = keywords.filter((k) => k.covered).map((k) => k.keyword);
+    const missing = keywords.filter((k) => !k.covered);
     const bullets = enabledBullets(context.experiences);
 
     const changes: TailoringChange[] = [];
@@ -113,6 +132,28 @@ export const mockAiProvider: AiProvider = {
       if (changes.length === 4) break;
     }
 
+    const fields = pinSpineFacts(
+      applyChangesToFields(
+        fieldsFromProfileSpine({
+          profile: context.profile,
+          experiences: context.experiences,
+          skills: context.skills,
+          education: context.education,
+          projects: context.projects,
+          certifications: context.certifications,
+        }),
+        changes,
+      ),
+      fieldsFromProfileSpine({
+        profile: context.profile,
+        experiences: context.experiences,
+        skills: context.skills,
+        education: context.education,
+        projects: context.projects,
+        certifications: context.certifications,
+      }),
+    );
+
     const summary = changes.length
       ? `Re-emphasized ${changes.length} of your real bullet${changes.length === 1 ? "" : "s"} to match this role's language. Nothing was invented.`
       : bullets.length
@@ -125,7 +166,149 @@ export const mockAiProvider: AiProvider = {
       keywords,
       variant: used.size ? `${[...used][0]}-led` : null,
       model: "local/keyword-match",
+      fields,
+      missingSkills: missing.slice(0, 5).map((k) => ({
+        skill: k.keyword,
+        prompt: `If you've used ${k.keyword}, briefly describe where — we'll turn it into a skill chip and 1–2 bullets. Skip if you haven't.`,
+      })),
     });
+  },
+
+  async enrichSkillGaps({
+    fields,
+    briefs,
+  }: EnrichSkillGapsInput): Promise<ResumeFields> {
+    const next: ResumeFields = {
+      ...fields,
+      experiences: fields.experiences.map((e) => ({ ...e, bullets: [...e.bullets] })),
+      skills: [...fields.skills],
+    };
+    const filled = briefs.filter((b) => b.text.trim().length >= 12);
+    if (!filled.length) return delay(next, 200);
+
+    for (const brief of filled) {
+      if (!next.skills.some((s) => s.toLowerCase() === brief.skill.toLowerCase())) {
+        next.skills.push(brief.skill);
+      }
+      const sentence = brief.text.trim().replace(/\s+/g, " ");
+      const bullets = [
+        sentence.length > 160 ? `${sentence.slice(0, 157)}…` : sentence,
+      ];
+      if (sentence.length > 80) {
+        const second = `Applied ${brief.skill} in the context described above.`;
+        bullets.push(second);
+      }
+      const target =
+        next.experiences[0] ??
+        ({
+          title: "Additional",
+          company: "Additional",
+          startDate: null,
+          endDate: null,
+          bullets: [] as string[],
+        } as ResumeFields["experiences"][number]);
+      if (!next.experiences[0]) next.experiences.unshift(target);
+      target.bullets.push(...bullets);
+    }
+    return delay(next, 250);
+  },
+
+  async editTailoredResume({
+    fields,
+    instruction,
+  }: EditTailoredResumeInput) {
+    const text = instruction.trim();
+    const next: ResumeFields = {
+      ...fields,
+      links: fields.links.map((l) => ({ ...l })),
+      experiences: fields.experiences.map((e) => ({
+        ...e,
+        bullets: [...e.bullets],
+      })),
+      education: fields.education.map((e) => ({ ...e, lines: [...e.lines] })),
+      projects: fields.projects.map((e) => ({ ...e, lines: [...e.lines] })),
+      certifications: fields.certifications.map((e) => ({
+        ...e,
+        lines: [...e.lines],
+      })),
+      skills: [...fields.skills],
+    };
+    const changes: TailoringChange[] = [];
+    const lower = text.toLowerCase();
+
+    const emailMatch = text.match(
+      /(?:email|e-mail)\s+(?:to\s+|as\s+)?([^\s,]+@[^\s,]+)/i,
+    );
+    if (emailMatch) {
+      changes.push({
+        before: fields.email ?? "",
+        after: emailMatch[1],
+        rationale: "follow-up edit",
+      });
+      next.email = emailMatch[1];
+    }
+
+    const phoneMatch = text.match(
+      /(?:phone|mobile|cell)\s+(?:to\s+|as\s+)?([+\d][\d\s\-()]{6,}\d)/i,
+    );
+    if (phoneMatch) {
+      changes.push({
+        before: fields.phone ?? "",
+        after: phoneMatch[1].trim(),
+        rationale: "follow-up edit",
+      });
+      next.phone = phoneMatch[1].trim();
+    }
+
+    const headlineMatch = text.match(
+      /(?:headline|tagline|title)\s+(?:to\s+|as\s+)(.+)$/i,
+    );
+    if (headlineMatch && !/job title|role title|title at/i.test(text)) {
+      const after = headlineMatch[1].trim().replace(/[."']+$/, "");
+      changes.push({
+        before: fields.headline ?? "",
+        after,
+        rationale: "follow-up edit",
+      });
+      next.headline = after;
+    }
+
+    const locationMatch = text.match(
+      /(?:location|city|based in)\s+(?:to\s+|as\s+)?(.+)$/i,
+    );
+    if (locationMatch && !emailMatch) {
+      const after = locationMatch[1].trim().replace(/[."']+$/, "");
+      if (after.length < 80) {
+        changes.push({
+          before: fields.location ?? "",
+          after,
+          rationale: "follow-up edit",
+        });
+        next.location = after;
+      }
+    }
+
+    if (!changes.length && /shorten|shorter|trim/i.test(lower) && next.experiences[0]?.bullets[0]) {
+      const before = next.experiences[0].bullets[0];
+      const after =
+        before.length > 90 ? `${before.slice(0, 87).replace(/\s+\S*$/, "")}…` : before;
+      if (after !== before) {
+        next.experiences[0].bullets[0] = after;
+        changes.push({ before, after, rationale: "follow-up shorten" });
+      }
+    }
+
+    return delay(
+      {
+        summary: changes.length
+          ? `Applied ${changes.length} edit${changes.length === 1 ? "" : "s"} from your instruction.`
+          : "Couldn't map that instruction locally — try naming the field (email, phone, headline).",
+        changes,
+        fields: next,
+        model: "local/edit",
+      },
+      200,
+    );
   },
 
   atsGap: (input) => delay(computeAtsGap(input), 0),
@@ -320,6 +503,7 @@ const SAMPLE_PARSE: ParsedResume = {
   // Deliberately the address the `contact` category objects to below, so the
   // parse and the report describe the same imaginary file.
   email: "beastmode_dev_99@example.com",
+  phone: null,
   location: "Bengaluru, India",
   summary:
     "Backend engineer with six years on payments and event infrastructure. Happiest where correctness and latency are both non-negotiable.",

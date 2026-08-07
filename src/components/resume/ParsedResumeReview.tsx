@@ -70,9 +70,31 @@ export function ParsedResumeReview({
   const chosenHeadline = identityChecked("headline") ? parsed.headline : null;
 
   const nothingParsed =
-    !parsed.experiences.length && !parsed.skills.length && !parsed.fullName && !parsed.headline;
+    !parsed.experiences.length &&
+    !parsed.skills.length &&
+    !parsed.fullName &&
+    !parsed.headline &&
+    !parsed.education.length &&
+    !parsed.projects.length &&
+    !parsed.certifications.length &&
+    !parsed.summary &&
+    !parsed.location &&
+    !parsed.links.length &&
+    !parsed.email &&
+    !parsed.phone;
   const nothingChosen =
-    !chosenRoles.length && !chosenSkills.length && !chosenName && !chosenHeadline;
+    !chosenRoles.length &&
+    !chosenSkills.length &&
+    !chosenName &&
+    !chosenHeadline &&
+    !parsed.education.length &&
+    !parsed.projects.length &&
+    !parsed.certifications.length &&
+    !parsed.summary &&
+    !parsed.location &&
+    !parsed.links.length &&
+    !parsed.email &&
+    !parsed.phone;
 
   const duplicates = parsed.experiences.filter(
     (role, i) => !offRoles.has(i) && existingRoleKeys.has(roleKey(role.title, role.company)),
@@ -101,7 +123,15 @@ export function ParsedResumeReview({
       mode,
       fullName: chosenName,
       headline: chosenHeadline,
+      email: parsed.email,
+      phone: parsed.phone,
+      location: parsed.location,
+      summary: parsed.summary,
+      links: parsed.links,
       experiences: chosenRoles,
+      education: parsed.education,
+      projects: parsed.projects,
+      certifications: parsed.certifications,
       skills: chosenSkills,
     });
     onApplied?.(result);
@@ -240,7 +270,7 @@ export function ParsedResumeReview({
         </section>
       )}
 
-      <UnstoredFields parsed={parsed} />
+      <SpineExtras parsed={parsed} />
 
       <div style={css("display:flex; align-items:center; gap:12px; flex-wrap:wrap;")}>
         <PrimaryButton onClick={submit} disabled={nothingChosen || apply.isPending}>
@@ -464,17 +494,14 @@ function RoleCard({
 }
 
 /**
- * Everything read off the file that the profile has no column for.
- *
- * Shown rather than dropped, and with no checkboxes, because there is nothing to
- * decide: these are kept with the report either way. That matters more than it
- * looks — the parse is the only surviving record of the document's content, so a
- * rebuilt resume is rendered from this list, and a section silently missing here
- * is a section missing from the new file.
+ * Contact, summary, education, projects and certifications now land on the
+ * profile spine on confirm. Shown here so the user can see what will be stored
+ * — unticking is reserved for roles/skills where conflicts are common.
  */
-function UnstoredFields({ parsed }: { parsed: ParsedResume }) {
+function SpineExtras({ parsed }: { parsed: ParsedResume }) {
   const contact: string[] = [];
   if (parsed.email) contact.push(parsed.email);
+  if (parsed.phone) contact.push(parsed.phone);
   if (parsed.location) contact.push(parsed.location);
   for (const link of parsed.links) contact.push(`${link.label}: ${link.url}`);
 
@@ -487,13 +514,13 @@ function UnstoredFields({ parsed }: { parsed: ParsedResume }) {
   if (!contact.length && !sections.length && !parsed.summary) return null;
 
   return (
-    <div style={css("border:1px dashed oklch(0.87 0.008 260); border-radius:12px; padding:16px 18px; background:#fff;")}>
+    <div style={css("border:1px solid oklch(0.9 0.006 260); border-radius:12px; padding:16px 18px; background:#fff;")}>
       <div style={css("font-size:12.5px; font-weight:600; margin-bottom:4px;")}>
-        Also read off the file, with nowhere on your profile to put it
+        Also going on your profile
       </div>
       <div style={css("font-size:12px; color:oklch(0.55 0.015 260); line-height:1.55; margin-bottom:14px;")}>
-        Your profile stores roles, bullets and skills. The rest is kept with this report, and is what
-        a rebuilt version of your resume would be written from.
+        Contact details, summary, education, projects and certifications are
+        stored with your roles and skills so Generate and Tailor can use them.
       </div>
 
       {parsed.summary && (
@@ -569,6 +596,21 @@ function AppliedSummary({
     `${result.bulletsAdded} bullet${result.bulletsAdded === 1 ? "" : "s"}`,
     `${result.skillsAdded} skill${result.skillsAdded === 1 ? "" : "s"}`,
   ];
+  if (result.educationAdded) {
+    parts.push(
+      `${result.educationAdded} education entr${result.educationAdded === 1 ? "y" : "ies"}`,
+    );
+  }
+  if (result.projectsAdded) {
+    parts.push(
+      `${result.projectsAdded} project${result.projectsAdded === 1 ? "" : "s"}`,
+    );
+  }
+  if (result.certificationsAdded) {
+    parts.push(
+      `${result.certificationsAdded} certification${result.certificationsAdded === 1 ? "" : "s"}`,
+    );
+  }
 
   return (
     <div style={css("border:1px solid oklch(0.55 0.13 145 / 0.3); background:oklch(0.55 0.13 145 / 0.05); border-radius:13px; padding:20px;")}>

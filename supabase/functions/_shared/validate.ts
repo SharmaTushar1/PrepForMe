@@ -346,6 +346,7 @@ function parsedResume(raw: unknown): ParsedResume {
     fullName: nullableText(source.fullName),
     headline: nullableText(source.headline),
     email: nullableText(source.email),
+    phone: nullableText(source.phone),
     location: nullableText(source.location),
     summary: nullableText(source.summary),
     links: links(source.links),

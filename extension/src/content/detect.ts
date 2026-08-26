@@ -76,6 +76,11 @@ function splitTitle(title: string): { role: string; company: string } | null {
       return { role: match[1].trim(), company: match[2].trim() };
     }
   }
+  // "Company: Role" format (text before colon = company, after = role).
+  const colonMatch = title.match(/^(.*?):\s*(.*)$/);
+  if (colonMatch?.[1] && colonMatch?.[2]) {
+    return { role: colonMatch[2].trim(), company: colonMatch[1].trim() };
+  }
   return null;
 }
 

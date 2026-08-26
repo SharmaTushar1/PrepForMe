@@ -16,12 +16,18 @@ import fs from "node:fs";
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const watch = process.argv.includes("--watch");
 
+// Clean dist once before building, not per-target in watch mode.
+const distPath = path.join(root, "dist");
+if (!watch && fs.existsSync(distPath)) {
+  fs.rmSync(distPath, { recursive: true, force: true });
+}
+
 const targets = [
   {
     entry: "src/background/index.ts",
     fileName: "background.js",
     format: "es",
-    emptyOutDir: true,
+    emptyOutDir: watch ? false : true,
   },
   {
     entry: "src/content/bridge.ts",

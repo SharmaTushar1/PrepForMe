@@ -49,28 +49,40 @@ async function writePendingSignIn(pending: PendingSignIn | null): Promise<void> 
   }
 }
 
+let refreshInFlight: Promise<BridgeSession | null> | null = null;
+
 async function refresh(session: BridgeSession): Promise<BridgeSession | null> {
-  const response = await fetch(`${authUrl}/token?grant_type=refresh_token`, {
-    method: "POST",
-    headers: { "content-type": "application/json", apikey: supabaseKey },
-    body: JSON.stringify({ refresh_token: session.refreshToken }),
-  });
-  if (!response.ok) return null;
-  const body = (await response.json()) as {
-    access_token?: string;
-    refresh_token?: string;
-    expires_at?: number;
-    user?: { email?: string | null };
-  };
-  if (!body.access_token || !body.refresh_token) return null;
-  const next: BridgeSession = {
-    accessToken: body.access_token,
-    refreshToken: body.refresh_token,
-    expiresAt: body.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
-    userEmail: body.user?.email ?? session.userEmail,
-  };
-  await writeSession(next);
-  return next;
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    try {
+      const response = await fetch(`${authUrl}/token?grant_type=refresh_token`, {
+        method: "POST",
+        headers: { "content-type": "application/json", apikey: supabaseKey },
+        body: JSON.stringify({ refresh_token: session.refreshToken }),
+      });
+      if (!response.ok) return null;
+      const body = (await response.json()) as {
+        access_token?: string;
+        refresh_token?: string;
+        expires_at?: number;
+        user?: { email?: string | null };
+      };
+      if (!body.access_token || !body.refresh_token) return null;
+      const next: BridgeSession = {
+        accessToken: body.access_token,
+        refreshToken: body.refresh_token,
+        expiresAt: body.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+        userEmail: body.user?.email ?? session.userEmail,
+      };
+      await writeSession(next);
+      return next;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 }
 
 /**
@@ -362,8 +374,9 @@ async function autofillAllFrames(
     resumeFileName: message.resumeFileName ?? null,
   };
 
+  let frames: chrome.webNavigation.GetAllFrameResultDetails[] | null = null;
   try {
-    const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    frames = await chrome.webNavigation.getAllFrames({ tabId });
     if (frames) {
       await Promise.all(
         frames.map(async (frame) => {
@@ -396,9 +409,29 @@ async function autofillAllFrames(
   }
 
   try {
+    // Use explicit frameIds instead of allFrames to avoid MAIN world.
+    const targetFrameIds: number[] = [];
+    if (frames) {
+      const topOrigin = frames.find((f) => f.frameId === 0)?.url;
+      const topOriginObj = topOrigin ? new URL(topOrigin) : null;
+      for (const frame of frames) {
+        try {
+          const frameUrl = new URL(frame.url);
+          // Include frames matching top origin or known ATS hosts.
+          if (
+            (topOriginObj && frameUrl.origin === topOriginObj.origin) ||
+            /greenhouse\.io$/i.test(frameUrl.hostname)
+          ) {
+            targetFrameIds.push(frame.frameId);
+          }
+        } catch {
+          // Invalid URL, skip.
+        }
+      }
+    }
+
     const results = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      world: "MAIN",
+      target: targetFrameIds.length > 0 ? { tabId, frameIds: targetFrameIds } : { tabId },
       args: [
         message.ats,
         message.fields,
@@ -603,16 +636,17 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
     return true;
   }
   if (message.type === "OPEN_PDF_TAB") {
-    const STORAGE_KEY = "pfm_pdf_preview";
+    const requestId = `pfm_pdf_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    const storageKey = `pfm_pdf_preview_${requestId}`;
     chrome.storage.session
       .set({
-        [STORAGE_KEY]: {
+        [storageKey]: {
           base64: message.base64,
           fileName: message.fileName ?? "Resume - Tailored.pdf",
           createdAt: Date.now(),
         },
       })
-      .then(() => chrome.tabs.create({ url: chrome.runtime.getURL("pdf-viewer.html") }))
+      .then(() => chrome.tabs.create({ url: chrome.runtime.getURL(`pdf-viewer.html?req=${requestId}`) }))
       .then(() => sendResponse({ ok: true as const }))
       .catch((e) =>
         sendResponse({

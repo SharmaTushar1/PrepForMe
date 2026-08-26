@@ -211,7 +211,7 @@ function fillByLabel(doc: Document, ctx: FillContext, report: FillReport): void 
       }
     }
 
-    if (!alreadyFilled && FLAG_RULES.some((r) => r.test.test(label))) {
+    if (!alreadyFilled && FLAG_RULES.some((r) => r.test(label))) {
       const humanLabel = labelFor(doc, field).trim().slice(0, 80) || "An unlabeled question";
       if (!report.flagged.includes(humanLabel)) report.flagged.push(humanLabel);
     }
@@ -298,7 +298,12 @@ export function attachResumeBytes(
   }
 
   if (candidates.length === 0) {
-    const fallback = doc.querySelector<HTMLInputElement>('input[type="file"]:not([id*="cover"]):not([name*="cover"])');
+    const allFileInputs = Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="file"]'));
+    const fallback = allFileInputs.find((el) => {
+      const id = (el.id || "").toLowerCase();
+      const name = (el.name || "").toLowerCase();
+      return !id.includes("cover") && !name.includes("cover");
+    });
     if (fallback) candidates.push(fallback);
   }
 

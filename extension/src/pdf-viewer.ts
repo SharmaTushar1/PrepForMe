@@ -2,12 +2,20 @@
  * Extension page that displays a PDF previously stashed in chrome.storage.session
  * by the background worker (OPEN_PDF_TAB). Keeps large PDFs out of the URL bar.
  */
-const STORAGE_KEY = "pfm_pdf_preview";
-
 async function main(): Promise<void> {
   const status = document.getElementById("status");
-  const stored = await chrome.storage.session.get(STORAGE_KEY);
-  const payload = stored[STORAGE_KEY] as
+
+  const params = new URLSearchParams(window.location.search);
+  const requestId = params.get("req");
+
+  if (!requestId) {
+    if (status) status.textContent = "No PDF to show. Go back to the PrepFor.Me panel and open it again.";
+    return;
+  }
+
+  const storageKey = `pfm_pdf_preview_${requestId}`;
+  const stored = await chrome.storage.session.get(storageKey);
+  const payload = stored[storageKey] as
     | { base64: string; fileName?: string; createdAt: number }
     | undefined;
 
@@ -16,7 +24,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  await chrome.storage.session.remove(STORAGE_KEY);
+  await chrome.storage.session.remove(storageKey);
 
   try {
     const binary = atob(payload.base64);

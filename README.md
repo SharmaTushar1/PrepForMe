@@ -133,9 +133,9 @@ gotcha in [§10](TECHNICAL.md#10-gotchas).
 
 ## Not built yet
 
-Resume upload and parsing, real LLM calls, Discover's job-feed queries, Practice, and
-drag-and-drop on the kanban board. Each of these says so on screen instead of
-pretending. See [PROJECT.md](PROJECT.md) for what's planned and in what order.
+Discover's job-feed queries, Practice, and drag-and-drop on the kanban board. Each of
+these says so on screen instead of pretending. See [PROJECT.md](PROJECT.md) for what's
+planned and in what order.
 
 ## Browser extension
 

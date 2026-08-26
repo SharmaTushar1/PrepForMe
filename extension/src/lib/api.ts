@@ -44,7 +44,12 @@ function assertConfigured(): void {
 
 async function getAccessToken(): Promise<string> {
   const response = await sendMessageSafe<GetSessionResponse>({ type: "GET_SESSION" });
-  if (!response?.ok) throw new NotSignedInError();
+  if (!response?.ok) {
+    if (response?.reason === "expired" || response?.reason === "refresh_failed") {
+      throw new SessionExpiredError();
+    }
+    throw new NotSignedInError();
+  }
   return response.accessToken;
 }
 

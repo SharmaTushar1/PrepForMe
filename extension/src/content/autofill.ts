@@ -19,12 +19,6 @@ import {
   mergeReports,
   type FillReport,
 } from "./fill-core";
-import {
-  PFM_AUTOFILL_REQUEST,
-  PFM_AUTOFILL_RESULT,
-  type PfmAutofillRequest,
-  type PfmAutofillResult,
-} from "./autofill-protocol";
 
 export type { FillReport };
 
@@ -42,21 +36,6 @@ function applicationDocuments(): Document[] {
   return docs;
 }
 
-function greenhouseIframes(): HTMLIFrameElement[] {
-  const out: HTMLIFrameElement[] = [];
-  for (const iframe of Array.from(document.querySelectorAll("iframe"))) {
-    const id = iframe.id || "";
-    const src = iframe.src || "";
-    if (
-      id === "grnhse_iframe" ||
-      /greenhouse\.io/i.test(src) ||
-      iframe.closest("#grnhse_app")
-    ) {
-      out.push(iframe);
-    }
-  }
-  return out;
-}
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -73,62 +52,6 @@ function needsFrameBackup(report: FillReport, hadPdf: boolean): boolean {
   if (!report.filled.includes("Phone")) return true;
   if (hadPdf && !report.filled.includes("Resume")) return true;
   return false;
-}
-
-function fillViaPostMessage(
-  ats: AtsKind,
-  fields: ResumeFields,
-  profile: ProfileRecord | null,
-  resumePdfBase64: string | null,
-  resumeFileName: string | null,
-): Promise<FillReport> {
-  const iframes = greenhouseIframes();
-  if (iframes.length === 0) {
-    return Promise.resolve(emptyReport());
-  }
-
-  const requestId = `pfm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const request: PfmAutofillRequest = {
-    type: PFM_AUTOFILL_REQUEST,
-    requestId,
-    ats,
-    fields,
-    profile,
-    resumePdfBase64,
-    resumeFileName,
-  };
-
-  return new Promise((resolve) => {
-    const report = emptyReport();
-    let settled = 0;
-    const expected = iframes.length;
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener("message", onMessage);
-      resolve(report);
-    }, 6000);
-
-    const onMessage = (event: MessageEvent) => {
-      const data = event.data as PfmAutofillResult | undefined;
-      if (!data || data.type !== PFM_AUTOFILL_RESULT || data.requestId !== requestId) return;
-      mergeReports(report, data.report);
-      settled += 1;
-      if (settled >= expected) {
-        window.clearTimeout(timeout);
-        window.removeEventListener("message", onMessage);
-        resolve(report);
-      }
-    };
-
-    window.addEventListener("message", onMessage);
-
-    for (const iframe of iframes) {
-      try {
-        iframe.contentWindow?.postMessage(request, "*");
-      } catch {
-        // ignore
-      }
-    }
-  });
 }
 
 async function fillViaBackground(
@@ -205,20 +128,8 @@ export async function runAutofill(
     );
   }
 
-  // Cross-origin Greenhouse iframe — postMessage to the frame content script.
-  // Text fields go here; PDF may be large so we always reinforce via background.
-  const postReport = await fillViaPostMessage(
-    ats,
-    enriched,
-    profile,
-    // Prefer background for the PDF attach; still send a copy when small enough.
-    resumePdfBase64 && resumePdfBase64.length < 2_500_000 ? resumePdfBase64 : null,
-    resumeFileName,
-  );
-  mergeReports(report, postReport);
-
-  // Background reaches the iframe even when postMessage only partially worked
-  // (e.g. name filled, phone/resume still empty).
+  // Cross-origin Greenhouse iframe — use the authenticated background all-frame dispatch.
+  // Background reaches all frames via chrome.runtime.onMessage.
   if (needsFrameBackup(report, Boolean(resumePdfBase64))) {
     const bgReport = await fillViaBackground(
       ats,
@@ -249,10 +160,6 @@ export async function runAutofill(
     if (contactMissing) {
       report.flagged.unshift(
         "Your tailored resume is missing name and email — add them on your PrepFor.Me profile, then try again.",
-      );
-    } else if (greenhouseIframes().length > 0 && !report.sawGreenhouseForm) {
-      report.flagged.unshift(
-        "Found a Greenhouse embed but couldn't reach the Apply form inside it. Reload the extension (chrome://extensions → Reload), refresh this tab, then try again.",
       );
     } else if (report.flagged.length === 0) {
       report.flagged.push(

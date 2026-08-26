@@ -26,7 +26,7 @@ export const apiBaseUrl = apiBase || "https://prep-for-me.vercel.app";
  * the extension a forged session.
  */
 export const trustedAppOrigins = (
-  rawAppOrigins ? rawAppOrigins.split(",") : ["http://localhost:5173", "https://prep-for-me.vercel.app"]
+  rawAppOrigins ? rawAppOrigins.split(",") : ["https://prep-for-me.vercel.app", "http://localhost:5173"]
 )
   .map((o) => o.trim())
   .filter(Boolean);

@@ -12,12 +12,6 @@ import {
 import type { AtsKind } from "./detect";
 import type { ProfileRecord, ResumeFields } from "../lib/types";
 import type { ExtensionMessage } from "../lib/messages";
-import {
-  PFM_AUTOFILL_REQUEST,
-  PFM_AUTOFILL_RESULT,
-  type PfmAutofillRequest,
-  type PfmAutofillResult,
-} from "./autofill-protocol";
 import type { FillReport } from "./fill-core";
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -56,35 +50,6 @@ function runFill(
   }
   return report;
 }
-
-window.addEventListener("message", (event: MessageEvent) => {
-  const data = event.data as PfmAutofillRequest | undefined;
-  if (!data || data.type !== PFM_AUTOFILL_REQUEST || !data.requestId) return;
-
-  const report = runFill(
-    data.ats ?? "greenhouse",
-    data.fields,
-    data.profile ?? null,
-    data.resumePdfBase64,
-    data.resumeFileName,
-  );
-
-  const result: PfmAutofillResult = {
-    type: PFM_AUTOFILL_RESULT,
-    requestId: data.requestId,
-    report,
-  };
-
-  try {
-    if (event.source && "postMessage" in event.source) {
-      (event.source as Window).postMessage(result, "*");
-    } else {
-      window.parent.postMessage(result, "*");
-    }
-  } catch {
-    window.parent.postMessage(result, "*");
-  }
-});
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
   if (message.type !== "AUTOFILL_THIS_FRAME") return false;

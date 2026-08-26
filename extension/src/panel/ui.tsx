@@ -129,9 +129,10 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
-export function Label({ children }: { children: React.ReactNode }) {
+export function Label({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
   return (
     <label
+      htmlFor={htmlFor}
       style={{
         fontSize: 11,
         fontWeight: 600,

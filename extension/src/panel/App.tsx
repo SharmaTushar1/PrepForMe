@@ -547,14 +547,15 @@ function IdlePanel({
           Extension isn't configured. Fill extension/.env.local, run npm run build, and reload on chrome://extensions.
         </ErrorNote>
       )}
-      <Label>Company</Label>
+      <Label htmlFor="pfm-company-input">Company</Label>
       <TextInput
+        id="pfm-company-input"
         value={job.company}
         onChange={(e) => onChangeJob({ ...job, company: e.target.value })}
         style={{ marginBottom: 10 }}
       />
-      <Label>Role</Label>
-      <TextInput value={job.role} onChange={(e) => onChangeJob({ ...job, role: e.target.value })} style={{ marginBottom: 14 }} />
+      <Label htmlFor="pfm-role-input">Role</Label>
+      <TextInput id="pfm-role-input" value={job.role} onChange={(e) => onChangeJob({ ...job, role: e.target.value })} style={{ marginBottom: 14 }} />
 
       {ats === "generic" && (
         <div style={{ fontSize: 11.5, color: colors.textMuted, marginBottom: 14, lineHeight: 1.5 }}>

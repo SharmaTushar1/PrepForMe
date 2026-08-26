@@ -92,11 +92,21 @@ export interface ApplicationRecord {
   postingUrl: string | null;
   jobDescription: string | null;
   tailoredResume: ResumeFields | null;
+  /** Full last tailor pass, when `tailored_resume` was saved as a session blob. */
+  tailorSession: {
+    summary: string;
+    changes: TailoringChange[];
+    keywords: AtsKeyword[];
+    missingSkills: MissingSkillPrompt[];
+    variant: string | null;
+  } | null;
   templateId: ResumeTemplateId | null;
 }
 
 export interface ProfileRecord {
   fullName: string | null;
+  email: string | null;
+  phone: string | null;
   noticePeriod: string | null;
   workAuthorization: string | null;
   salaryExpectation: string | null;

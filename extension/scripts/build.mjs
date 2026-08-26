@@ -35,6 +35,18 @@ const targets = [
     format: "iife",
     emptyOutDir: false,
   },
+  {
+    entry: "src/content/frame-autofill.ts",
+    fileName: "content-frame-autofill.js",
+    format: "iife",
+    emptyOutDir: false,
+  },
+  {
+    entry: "src/pdf-viewer.ts",
+    fileName: "pdf-viewer.js",
+    format: "iife",
+    emptyOutDir: false,
+  },
 ];
 
 for (const target of targets) {

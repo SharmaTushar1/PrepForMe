@@ -46,10 +46,11 @@ content script that only runs on the PrepFor.Me web app's own origin
 (`localhost:5173` or `prep-for-me.vercel.app`, see `matches` in
 `manifest.json`) reads the Supabase session Supabase already put in that
 tab's `localStorage` and hands the tokens to the background service worker.
-So: **keep a PrepFor.Me tab open and signed in**, and the extension picks up
-that session on any other tab. Signing out of the web app doesn't currently
-push a sign-out to the extension mid-session — reload the job-site tab if you
-switch accounts.
+Sign in there once — the panel reuses that session. Clicking **Open PrepFor.Me
+to sign in** opens a login tab; when the session lands, the extension focuses
+your job tab again and closes the login tab. The panel also polls automatically,
+so there's no manual "check again" step. After reloading the extension, keep
+(or refresh) a signed-in PrepFor.Me tab so the session can be pulled.
 
 If you change `VITE_APP_ORIGINS` below to something other than the two
 defaults, also update the two origin lists in `public/manifest.json`
@@ -78,12 +79,17 @@ cp .env.example .env.local   # fill in the SAME Supabase project as the main app
 npm run build
 ```
 
+**Without `.env.local`, the build ships placeholder URLs and every tailor/autofill
+call fails with a network error.** After editing env, rebuild and reload the
+unpacked extension — Vite bakes these values in at build time.
+
 Then in Chrome: `chrome://extensions` → enable **Developer mode** → **Load
 unpacked** → select `extension/dist/`.
 
-`npm run dev` runs the same three builds in Vite's `--watch` mode — reload the
-unpacked extension in `chrome://extensions` (and refresh any open tab) after
-each rebuild; there's no HMR into a live page for a MV3 content script.
+`npm run dev` watches the Vite builds — reload the unpacked extension in
+`chrome://extensions` **and refresh the job tab** after each rebuild (content
+scripts, including the Greenhouse iframe filler, are not re-injected into
+already-open frames). There's no HMR into a live page for a MV3 content script.
 
 ### Config
 
@@ -101,10 +107,13 @@ each rebuild; there's no HMR into a live page for a MV3 content script.
   keyword chips, and the "tweak this version" follow-up all hit the real
   model.
 - **Autofill — Greenhouse**: fixed element ids (`#first_name`, `#email`, …)
-  for the classic embed form, plus the resume PDF auto-attached to the file
-  input via the `DataTransfer` trick (`autofill.ts`), then a label-matching
-  sweep for whatever per-posting custom questions Greenhouse doesn't give
-  stable ids to.
+  plus resume PDF attach (`DataTransfer`) and a label-matching sweep for
+  custom questions. Company career sites (e.g. `jobs.solarwinds.com`) embed
+  the Apply form in a cross-origin `job-boards.greenhouse.io` iframe — the
+  top frame cannot see those inputs, so `content-frame-autofill.js` runs
+  inside every Greenhouse frame (`all_frames`) and fills on request via
+  `postMessage` / the background worker. After tailor, **Show resume PDF**
+  renders the real Chromium PDF in the panel (Open in new tab / Download).
 - **Autofill — everywhere else**: the same label-matching sweep alone: reads
   each visible field's `<label>`/`aria-label`/placeholder text and matches it
   against a small dictionary (name, email, phone, location, LinkedIn/GitHub/
@@ -133,3 +142,11 @@ each rebuild; there's no HMR into a live page for a MV3 content script.
   typechecked, not click-tested against a live job board from this
   environment. Load it unpacked and try it on a real Greenhouse posting
   before relying on it.
+
+## Later (not started)
+
+- **Cover letter in the extension:** generate a short letter from the tailored
+  (or base) resume + scraped job description, review in the panel, then attach
+  / paste into the ATS cover-letter field. Same honesty rules as tailor — no
+  invented company-specific facts. Costs AI tokens when run; autofill of an
+  already-generated letter would not.

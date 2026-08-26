@@ -5,23 +5,29 @@ import {
   checkSignedIn,
   editTailoredResume,
   enrichSkillGaps,
+  findExistingApplication,
   findOrCreateApplication,
   loadProfile,
   saveTailoredResume,
   tailorResume,
-  NotSignedInError,
+  updateJobDescription,
+  isAuthFailure,
+  NotConfiguredError,
 } from "../lib/api";
+import { isConfigured } from "../lib/config";
+import { sendMessageSafe, type ExtensionMessage, type StartSignInResponse } from "../lib/messages";
 import type {
   ApplicationRecord,
   AtsKeyword,
   MissingSkillPrompt,
   ProfileRecord,
   ResumeFields,
+  ResumeTemplateId,
   TailoringChange,
 } from "../lib/types";
 import { Badge, Button, ErrorNote, Label, Spinner, TextArea, TextInput } from "./ui";
+import { ResumePdfPreview } from "./ResumePdfPreview";
 import { colors, font } from "./theme";
-import { signInUrl } from "../lib/config";
 
 type Step =
   | "checking"
@@ -52,38 +58,175 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
   const [missingSkills, setMissingSkills] = useState<MissingSkillPrompt[]>([]);
   const [briefs, setBriefs] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
   const [tweakText, setTweakText] = useState("");
   const [lastTweak, setLastTweak] = useState<string | null>(null);
   const [tweaking, setTweaking] = useState(false);
   const [fillReport, setFillReport] = useState<FillReport | null>(null);
+  const [savedTailored, setSavedTailored] = useState<ApplicationRecord | null>(null);
+  const [lookingForSaved, setLookingForSaved] = useState(false);
+
+  function applySignedIn(email: string | null) {
+    setSignedInEmail(email);
+    setError(null);
+    setStep((current) => (current === "checking" || current === "signedOut" ? "idle" : current));
+  }
+
+  async function forceSignIn(message?: string) {
+    setSignedInEmail(null);
+    setError(message ?? null);
+    setStep("signedOut");
+    await sendMessageSafe({ type: "CLEAR_SESSION" });
+  }
+
+  function handleCaughtError(e: unknown, fallbackStep: Step) {
+    setError(messageOf(e));
+    if (isAuthFailure(e) || /session has expired/i.test(messageOf(e))) {
+      void forceSignIn(messageOf(e));
+      return;
+    }
+    setStep(fallbackStep);
+  }
+
+  function hydrateFromSaved(app: ApplicationRecord) {
+    if (!app.tailoredResume) return;
+    setApplication(app);
+    setFields(app.tailoredResume);
+    if (app.tailorSession) {
+      setSummary(app.tailorSession.summary);
+      setChanges(app.tailorSession.changes);
+      setKeywords(app.tailorSession.keywords);
+      setMissingSkills(app.tailorSession.missingSkills);
+    } else {
+      setSummary("Previously tailored resume from PrepFor.Me.");
+      setChanges([]);
+      setKeywords([]);
+      setMissingSkills([]);
+    }
+  }
 
   useEffect(() => {
+    let cancelled = false;
     checkSignedIn().then(({ signedIn, email }) => {
-      setSignedInEmail(email);
-      setStep(signedIn ? "idle" : "signedOut");
+      if (cancelled) return;
+      if (signedIn) applySignedIn(email);
+      else setStep("signedOut");
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Auto-detect sign-in: poll while signed out, and react when the background
+  // broadcasts that a session just landed (after the login tab finishes).
+  useEffect(() => {
+    if (step !== "signedOut") return;
+
+    let cancelled = false;
+    const tick = () => {
+      checkSignedIn().then(({ signedIn, email }) => {
+        if (!cancelled && signedIn) applySignedIn(email);
+      });
+    };
+    tick();
+    const id = window.setInterval(tick, 1500);
+
+    const onMessage = (message: ExtensionMessage) => {
+      if (message.type === "SESSION_READY") applySignedIn(message.email);
+    };
+    chrome.runtime.onMessage.addListener(onMessage);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      chrome.runtime.onMessage.removeListener(onMessage);
+    };
+  }, [step]);
 
   useEffect(() => {
     if (step !== "idle" && step !== "signedOut") return;
     loadProfile()
       .then(setProfile)
-      .catch(() => undefined);
+      .catch((e) => {
+        if (isAuthFailure(e)) void forceSignIn(messageOf(e));
+      });
   }, [step]);
 
-  const templateId = application?.templateId ?? profile?.defaultTemplateId ?? "classic";
+  // Look up a prior tailor pass for this posting so we can offer reuse (no credits).
+  useEffect(() => {
+    if (step !== "idle") return;
+    let cancelled = false;
+    setLookingForSaved(true);
+    findExistingApplication({
+      company: job.company,
+      role: job.role,
+      postingUrl: job.postingUrl || null,
+    })
+      .then((app) => {
+        if (cancelled) return;
+        setSavedTailored(app?.tailoredResume ? app : null);
+      })
+      .catch((e) => {
+        if (!cancelled && isAuthFailure(e)) void forceSignIn(messageOf(e));
+        else if (!cancelled) setSavedTailored(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLookingForSaved(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, job.company, job.role, job.postingUrl]);
+
+  const templateId = application?.templateId ?? savedTailored?.templateId ?? profile?.defaultTemplateId ?? "classic";
+
+  async function runAutofillWithFields(nextFields: ResumeFields, app: ApplicationRecord | null) {
+    setStep("filling");
+    try {
+      const tpl = app?.templateId ?? profile?.defaultTemplateId ?? "classic";
+      const report = await runAutofill(ats, nextFields, profile, tpl, signedInEmail);
+      setFillReport(report);
+      setStep("done");
+    } catch (e) {
+      handleCaughtError(e, "result");
+    }
+  }
+
+  async function useSavedResume() {
+    if (!savedTailored?.tailoredResume) return;
+    setError(null);
+    hydrateFromSaved(savedTailored);
+    await runAutofillWithFields(savedTailored.tailoredResume, savedTailored);
+  }
+
+  async function reviewSavedResume() {
+    if (!savedTailored?.tailoredResume) return;
+    setError(null);
+    hydrateFromSaved(savedTailored);
+    setStep("result");
+  }
+
+  async function runAutofillAfterTailor() {
+    if (!fields) return;
+    await runAutofillWithFields(fields, application);
+  }
 
   async function startTailor() {
     setError(null);
     setStep("scanning");
     try {
+      if (!isConfigured) throw new NotConfiguredError();
       const app = await findOrCreateApplication({
         company: job.company,
         role: job.role,
         postingUrl: job.postingUrl || null,
         jobDescription: job.jobDescription,
       });
+      // tailor-resume reads job_description from the row — always push the
+      // scraped JD, including when we reused an older applications row.
+      if (job.jobDescription.trim()) {
+        await updateJobDescription(app.id, job.jobDescription);
+      }
       setApplication(app);
       const result = await tailorResume(app.id);
       setFields(result.fields);
@@ -91,6 +234,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
       setChanges(result.changes);
       setKeywords(result.keywords);
       setMissingSkills(result.missingSkills);
+      setSavedTailored(null);
 
       if (result.missingSkills.length > 0) {
         setStep("gapReview");
@@ -103,10 +247,9 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
         missingSkills: [],
         variant: result.variant,
       });
-      setStep("result");
+      await runAutofillWithFields(result.fields, app);
     } catch (e) {
-      setError(messageOf(e));
-      setStep(e instanceof NotSignedInError ? "signedOut" : "idle");
+      handleCaughtError(e, "idle");
     }
   }
 
@@ -129,10 +272,12 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
         missingSkills: [],
         variant: null,
       });
-      setStep("result");
+      setStep("filling");
+      const report = await runAutofill(ats, enrichResult.fields, profile, templateId, signedInEmail);
+      setFillReport(report);
+      setStep("done");
     } catch (e) {
-      setError(messageOf(e));
-      setStep("gapReview");
+      handleCaughtError(e, "gapReview");
     }
   }
 
@@ -146,9 +291,15 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
       setChanges(result.changes);
       setLastTweak(tweakText.trim());
       setTweakText("");
-      await saveTailoredResume(application.id, result.fields, { summary, changes: result.changes, keywords, missingSkills: [], variant: null });
+      await saveTailoredResume(application.id, result.fields, {
+        summary,
+        changes: result.changes,
+        keywords,
+        missingSkills: [],
+        variant: null,
+      });
     } catch (e) {
-      setError(messageOf(e));
+      handleCaughtError(e, "result");
     } finally {
       setTweaking(false);
     }
@@ -157,15 +308,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
   async function startAutofill() {
     if (!fields) return;
     setError(null);
-    setStep("filling");
-    try {
-      const report = await runAutofill(ats, fields, profile, templateId);
-      setFillReport(report);
-      setStep("done");
-    } catch (e) {
-      setError(messageOf(e));
-      setStep("result");
-    }
+    await runAutofillAfterTailor();
   }
 
   return (
@@ -194,10 +337,17 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
           </Centered>
         )}
 
-        {step === "signedOut" && <SignedOutPanel onRetry={() => checkSignedIn().then(({ signedIn, email }) => {
-          setSignedInEmail(email);
-          setStep(signedIn ? "idle" : "signedOut");
-        })} />}
+        {step === "signedOut" && (
+          <SignedOutPanel
+            onOpenSignIn={async () => {
+              setError(null);
+              const response = await sendMessageSafe<StartSignInResponse>({ type: "START_SIGN_IN" });
+              if (!response?.ok) {
+                setError(response && "error" in response ? response.error : "Couldn't open PrepFor.Me.");
+              }
+            }}
+          />
+        )}
 
         {step === "idle" && (
           <IdlePanel
@@ -205,6 +355,11 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
             job={job}
             onChangeJob={setJob}
             profile={profile}
+            configured={isConfigured}
+            lookingForSaved={lookingForSaved}
+            savedTailored={savedTailored}
+            onUseSaved={useSavedResume}
+            onReviewSaved={reviewSavedResume}
             onStart={startTailor}
           />
         )}
@@ -237,8 +392,10 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
             changes={changes}
             keywords={keywords}
             fields={fields}
+            templateId={templateId}
             showPreview={showPreview}
             onTogglePreview={() => setShowPreview((v) => !v)}
+            onAuthFailure={(msg) => void forceSignIn(msg)}
             tweakText={tweakText}
             onTweakChange={setTweakText}
             onApplyTweak={applyTweak}
@@ -258,14 +415,27 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
         )}
 
         {step === "done" && fillReport && (
-          <DonePanel report={fillReport} company={job.company} onDone={onClose} onTweak={() => setStep("result")} />
+          <DonePanel
+            report={fillReport}
+            company={job.company}
+            onShowResume={() => setStep("result")}
+            onAutofillAgain={startAutofill}
+          />
         )}
       </div>
 
       {step === "result" && (
-        <div style={{ padding: "12px 16px", borderTop: `1px solid ${colors.border}` }}>
+        <div style={{ padding: "12px 16px", borderTop: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", gap: 8 }}>
           <Button full size="lg" onClick={startAutofill}>
             Autofill this page
+          </Button>
+        </div>
+      )}
+
+      {step === "done" && (
+        <div style={{ padding: "12px 16px", borderTop: `1px solid ${colors.border}` }}>
+          <Button full variant="outline" onClick={onClose}>
+            Close panel
           </Button>
         </div>
       )}
@@ -278,7 +448,11 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
 }
 
 function messageOf(e: unknown): string {
-  return e instanceof Error ? e.message : "Something went wrong.";
+  if (!(e instanceof Error)) return "Something went wrong.";
+  if (e.message === "Failed to fetch" || /NetworkError|Load failed/i.test(e.message)) {
+    return "Couldn't reach PrepFor.Me's servers. Reload the extension on chrome://extensions after building with extension/.env.local filled in.";
+  }
+  return e.message;
 }
 
 function Header({ onClose, ats, company }: { onClose: () => void; ats: AtsKind; company: string }) {
@@ -324,25 +498,19 @@ function Centered({ children }: { children: React.ReactNode }) {
   return <div style={{ padding: "36px 8px", textAlign: "center" }}>{children}</div>;
 }
 
-function SignedOutPanel({ onRetry }: { onRetry: () => void }) {
+function SignedOutPanel({ onOpenSignIn }: { onOpenSignIn: () => void }) {
   return (
     <div style={{ textAlign: "center", padding: "20px 4px" }}>
       <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 6 }}>Sign in to PrepFor.Me first</div>
       <p style={{ fontSize: 12.5, color: colors.textMuted, lineHeight: 1.55, margin: "0 0 16px" }}>
-        Sign in there once — this panel reuses that session, so nothing needs to be typed here.
+        We'll open PrepFor.Me, wait for you to sign in, then bring you right back here automatically.
       </p>
-      <Button
-        size="sm"
-        style={{ marginBottom: 8 }}
-        onClick={() => window.open(signInUrl, "_blank", "noopener,noreferrer")}
-      >
+      <Button size="sm" onClick={onOpenSignIn}>
         Open PrepFor.Me to sign in
       </Button>
-      <div>
-        <Button variant="ghost" size="sm" onClick={onRetry}>
-          I've signed in — check again
-        </Button>
-      </div>
+      <p style={{ fontSize: 11.5, color: colors.textMuted, lineHeight: 1.5, margin: "14px 0 0" }}>
+        Already signed in? Keep your PrepFor.Me tab open — this panel checks automatically.
+      </p>
     </div>
   );
 }
@@ -352,17 +520,33 @@ function IdlePanel({
   job,
   onChangeJob,
   profile,
+  configured,
+  lookingForSaved,
+  savedTailored,
+  onUseSaved,
+  onReviewSaved,
   onStart,
 }: {
   ats: AtsKind;
   job: DetectedJob;
   onChangeJob: (job: DetectedJob) => void;
   profile: ProfileRecord | null;
+  configured: boolean;
+  lookingForSaved: boolean;
+  savedTailored: ApplicationRecord | null;
+  onUseSaved: () => void;
+  onReviewSaved: () => void;
   onStart: () => void;
 }) {
   const jdTooShort = job.jobDescription.trim().length < 40;
+  const hasSaved = Boolean(savedTailored?.tailoredResume);
   return (
     <div>
+      {!configured && (
+        <ErrorNote>
+          Extension isn't configured. Fill extension/.env.local, run npm run build, and reload on chrome://extensions.
+        </ErrorNote>
+      )}
       <Label>Company</Label>
       <TextInput
         value={job.company}
@@ -397,17 +581,58 @@ function IdlePanel({
           background: colors.bgMuted,
         }}
       >
-        Uses your saved profile and base resume{profile?.fullName ? ` (${profile.fullName})` : ""}. Update those in
-        PrepFor.Me if they're out of date.
+        Uses your saved profile and base resume
+        {profile?.fullName ? ` (${profile.fullName})` : ""}. Update those in PrepFor.Me if they're out of date.
       </div>
 
-      <Button full size="lg" onClick={onStart} disabled={!job.company.trim() || !job.role.trim()}>
-        Tailor &amp; autofill this page
-      </Button>
+      {lookingForSaved && (
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 14, textAlign: "center" }}>
+          Checking for a previous tailor…
+        </div>
+      )}
 
+      {hasSaved && !lookingForSaved && (
+        <div
+          style={{
+            border: `1px solid ${colors.success}`,
+            background: colors.successBg,
+            borderRadius: 9,
+            padding: "12px 12px",
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 600, color: colors.successText, marginBottom: 4 }}>
+            Already tailored for this role
+          </div>
+          <p style={{ fontSize: 12, color: colors.successText, lineHeight: 1.5, margin: "0 0 12px" }}>
+            Found the resume in PrepFor.Me's Materials for{" "}
+            <strong>
+              {savedTailored?.role} at {savedTailored?.company}
+            </strong>
+            . Reuse it to skip another credit spend.
+          </p>
+          <Button full size="lg" onClick={onUseSaved} disabled={!configured} style={{ marginBottom: 8 }}>
+            Use saved resume & autofill
+          </Button>
+          <Button full variant="outline" size="sm" onClick={onReviewSaved} disabled={!configured}>
+            Review saved resume first
+          </Button>
+        </div>
+      )}
+
+      <Button
+        full
+        size={hasSaved ? "sm" : "lg"}
+        variant={hasSaved ? "ghost" : "primary"}
+        onClick={onStart}
+        disabled={!configured || !job.company.trim() || !job.role.trim()}
+      >
+        {hasSaved ? "Re-tailor anyway (uses credits)" : "Tailor & autofill this page"}
+      </Button>
       <p style={{ fontSize: 11.5, color: colors.textMuted, lineHeight: 1.55, margin: "12px 0 0" }}>
-        We'll read the job description on this page and match it to your profile. You review every field — we never click
-        submit for you.
+        {hasSaved
+          ? "Re-tailor runs the model again against this posting's job description."
+          : "We'll read the job description on this page and match it to your profile. You review every field — we never click submit for you."}
       </p>
     </div>
   );
@@ -461,8 +686,10 @@ function ResultPanel({
   changes,
   keywords,
   fields,
+  templateId,
   showPreview,
   onTogglePreview,
+  onAuthFailure,
   tweakText,
   onTweakChange,
   onApplyTweak,
@@ -473,8 +700,10 @@ function ResultPanel({
   changes: TailoringChange[];
   keywords: AtsKeyword[];
   fields: ResumeFields;
+  templateId: ResumeTemplateId;
   showPreview: boolean;
   onTogglePreview: () => void;
+  onAuthFailure: (message: string) => void;
   tweakText: string;
   onTweakChange: (v: string) => void;
   onApplyTweak: () => void;
@@ -544,11 +773,13 @@ function ResultPanel({
         </>
       )}
 
-      <Button variant="outline" size="sm" onClick={onTogglePreview} style={{ marginBottom: 14 }}>
-        {showPreview ? "Hide preview" : "Preview resume"}
+      <Button variant="outline" size="sm" onClick={onTogglePreview} style={{ marginBottom: 10 }}>
+        {showPreview ? "Hide resume PDF" : "Show resume PDF"}
       </Button>
 
-      {showPreview && <ResumePreview fields={fields} />}
+      {showPreview && (
+        <ResumePdfPreview fields={fields} templateId={templateId} onAuthFailure={onAuthFailure} />
+      )}
 
       <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Tweak this version</div>
@@ -582,60 +813,42 @@ function ResultPanel({
   );
 }
 
-function ResumePreview({ fields }: { fields: ResumeFields }) {
-  return (
-    <div
-      style={{
-        border: `1px solid ${colors.border}`,
-        borderRadius: 9,
-        background: "#fff",
-        padding: 14,
-        marginBottom: 16,
-        fontSize: 11.5,
-        lineHeight: 1.5,
-      }}
-    >
-      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{fields.fullName || "Your name"}</div>
-      {fields.headline && <div style={{ color: colors.textMuted, marginBottom: 4 }}>{fields.headline}</div>}
-      <div style={{ color: colors.textMuted, marginBottom: 8 }}>
-        {[fields.email, fields.phone, fields.location].filter(Boolean).join(" · ")}
-      </div>
-      {fields.summary && <div style={{ marginBottom: 8 }}>{fields.summary}</div>}
-      {fields.experiences.slice(0, 2).map((exp, i) => (
-        <div key={i} style={{ marginBottom: 6 }}>
-          <div style={{ fontWeight: 600 }}>
-            {exp.title} — {exp.company}
-          </div>
-          <ul style={{ margin: "3px 0 0 16px", padding: 0 }}>
-            {exp.bullets.slice(0, 2).map((b, j) => (
-              <li key={j}>{b}</li>
-            ))}
-          </ul>
-        </div>
-      ))}
-      {fields.skills.length > 0 && (
-        <div style={{ color: colors.textMuted, marginTop: 6 }}>{fields.skills.join(" · ")}</div>
-      )}
-    </div>
-  );
-}
-
 function DonePanel({
   report,
   company,
-  onDone,
-  onTweak,
+  onShowResume,
+  onAutofillAgain,
 }: {
   report: FillReport;
   company: string;
-  onDone: () => void;
-  onTweak: () => void;
+  onShowResume: () => void;
+  onAutofillAgain: () => void;
 }) {
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, color: colors.successText, marginBottom: 14 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: colors.success, flexShrink: 0 }} />
-        {report.filled.length > 0 ? `Filled ${report.filled.length} field${report.filled.length === 1 ? "" : "s"}` : "Nothing matched automatically"}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 13.5,
+          fontWeight: 600,
+          color: report.filled.length > 0 ? colors.successText : colors.warningText,
+          marginBottom: 14,
+        }}
+      >
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: report.filled.length > 0 ? colors.success : colors.warningText,
+            flexShrink: 0,
+          }}
+        />
+        {report.filled.length > 0
+          ? `Filled ${report.filled.length} field${report.filled.length === 1 ? "" : "s"} on the page`
+          : "Couldn't autofill yet"}
       </div>
 
       {report.filled.map((label) => (
@@ -669,16 +882,24 @@ function DonePanel({
           margin: "12px 0 16px",
         }}
       >
-        Review every field, then click <strong style={{ color: colors.text }}>{company}'s own submit button</strong>.
-        PrepFor.Me never submits for you.
+        {report.noFormFound
+          ? "Your tailored resume is saved. Open the Apply form on this posting, then press Autofill again."
+          : (
+            <>
+              Review every field, then click <strong style={{ color: colors.text }}>{company}'s own submit button</strong>.
+              PrepFor.Me never submits for you.
+            </>
+          )}
       </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
-        <Button style={{ flex: 1 }} onClick={onDone}>
-          Got it — I'll review
-        </Button>
-        <Button variant="outline" onClick={onTweak}>
-          Tweak resume
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {report.noFormFound || report.filled.length === 0 ? (
+          <Button style={{ flex: 1 }} onClick={onAutofillAgain}>
+            Try autofill again
+          </Button>
+        ) : null}
+        <Button style={{ flex: 1 }} variant="outline" onClick={onShowResume}>
+          View tailored resume
         </Button>
       </div>
     </div>

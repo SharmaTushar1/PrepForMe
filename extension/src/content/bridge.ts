@@ -5,14 +5,18 @@
  * the web app, and hands it to the background service worker so the panel
  * on some other tab can act as the same user. Nothing is written back to
  * this page; this is read-only.
+ *
+ * Polls faster when opened from the extension (`?from=extension`) so the
+ * return-to-job-tab handoff feels instant after OAuth/magic-link lands.
  */
 import type { BridgeSession } from "../lib/types";
 
-const POLL_MS = 4000;
+const NORMAL_POLL_MS = 2000;
+const FAST_POLL_MS = 500;
+const fromExtension = new URLSearchParams(window.location.search).has("from") &&
+  new URLSearchParams(window.location.search).get("from") === "extension";
 
-/** supabase-js v2 keys its stored session `sb-<project-ref>-auth-token`; the
- * ref isn't known here, so any key matching the shape is read instead of
- * hardcoding one. */
+/** supabase-js keys its stored session `sb-<project-ref>-auth-token`. */
 const SESSION_KEY_PATTERN = /^sb-.*-auth-token$/;
 
 interface StoredSupabaseSession {
@@ -22,24 +26,31 @@ interface StoredSupabaseSession {
   user?: { email?: string | null };
 }
 
+function parseStored(raw: string): BridgeSession | null {
+  try {
+    const parsed = JSON.parse(raw) as StoredSupabaseSession & { currentSession?: StoredSupabaseSession };
+    const session = parsed.access_token ? parsed : parsed.currentSession;
+    if (!session?.access_token || !session.refresh_token) return null;
+    return {
+      accessToken: session.access_token,
+      refreshToken: session.refresh_token,
+      expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+      userEmail: session.user?.email ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function readSessionFromLocalStorage(): BridgeSession | null {
   for (let i = 0; i < window.localStorage.length; i++) {
     const key = window.localStorage.key(i);
-    if (!key || !SESSION_KEY_PATTERN.test(key)) continue;
+    if (!key) continue;
+    if (!SESSION_KEY_PATTERN.test(key) && key !== "supabase.auth.token") continue;
     const raw = window.localStorage.getItem(key);
     if (!raw) continue;
-    try {
-      const parsed = JSON.parse(raw) as StoredSupabaseSession;
-      if (!parsed.access_token || !parsed.refresh_token) continue;
-      return {
-        accessToken: parsed.access_token,
-        refreshToken: parsed.refresh_token,
-        expiresAt: parsed.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
-        userEmail: parsed.user?.email ?? null,
-      };
-    } catch {
-      // Not JSON, or not shaped like a session — keep looking.
-    }
+    const session = parseStored(raw);
+    if (session) return session;
   }
   return null;
 }
@@ -58,5 +69,8 @@ function syncOnce(): void {
 }
 
 syncOnce();
-window.setInterval(syncOnce, POLL_MS);
+window.setInterval(syncOnce, fromExtension ? FAST_POLL_MS : NORMAL_POLL_MS);
 window.addEventListener("storage", syncOnce);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") syncOnce();
+});

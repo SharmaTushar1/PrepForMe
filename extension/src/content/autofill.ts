@@ -37,6 +37,7 @@ function applicationDocuments(): Document[] {
 }
 
 
+/** Encodes binary PDF data as base64 for extension message transport. */
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -47,6 +48,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+/** Decides whether incomplete local filling should fall back to all-frame filling. */
 function needsFrameBackup(report: FillReport, hadPdf: boolean): boolean {
   if (report.filled.length === 0) return true;
   if (!report.filled.includes("Phone")) return true;
@@ -54,6 +56,7 @@ function needsFrameBackup(report: FillReport, hadPdf: boolean): boolean {
   return false;
 }
 
+/** Asks the background worker to fill eligible frames in the active job tab. */
 async function fillViaBackground(
   ats: AtsKind,
   fields: ResumeFields,
@@ -91,6 +94,7 @@ async function fillViaBackground(
   };
 }
 
+/** Fills the current application with tailored fields and an optional rendered resume. */
 export async function runAutofill(
   ats: AtsKind,
   fields: ResumeFields,

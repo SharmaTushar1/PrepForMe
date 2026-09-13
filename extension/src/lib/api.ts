@@ -34,14 +34,17 @@ export class NotConfiguredError extends Error {
   }
 }
 
+/** Identifies authentication errors that should restart the extension sign-in flow. */
 export function isAuthFailure(e: unknown): e is NotSignedInError | SessionExpiredError {
   return e instanceof NotSignedInError || e instanceof SessionExpiredError;
 }
 
+/** Stops API calls when the extension was built without required endpoint settings. */
 function assertConfigured(): void {
   if (!isConfigured) throw new NotConfiguredError();
 }
 
+/** Requests a current access token from the background worker. */
 async function getAccessToken(): Promise<string> {
   const response = await sendMessageSafe<GetSessionResponse>({ type: "GET_SESSION" });
   if (!response?.ok) {
@@ -53,12 +56,14 @@ async function getAccessToken(): Promise<string> {
   return response.accessToken;
 }
 
+/** Reports whether the background worker currently holds a valid signed-in session. */
 export async function checkSignedIn(): Promise<{ signedIn: boolean; email: string | null }> {
   const response = await sendMessageSafe<GetSessionResponse>({ type: "GET_SESSION" });
   if (!response?.ok) return { signedIn: false, email: null };
   return { signedIn: true, email: response.userEmail };
 }
 
+/** Builds the Supabase API key and bearer-token headers for the current user. */
 async function authHeaders(): Promise<Record<string, string>> {
   const token = await getAccessToken();
   return {
@@ -98,6 +103,7 @@ async function proxyFetch(
   return { status: response.status, body: response.body, contentType: response.contentType };
 }
 
+/** Sends an authenticated PostgREST request and normalizes service errors. */
 async function restRequest<T>(
   path: string,
   init: { method?: string; headers?: Record<string, string>; body?: string } = {},
@@ -122,6 +128,7 @@ async function restRequest<T>(
   return JSON.parse(response.body) as T;
 }
 
+/** Extracts a useful PostgREST error message with a status-based fallback. */
 function postgrestErrorMessage(status: number, body: string): string {
   try {
     const parsed = JSON.parse(body) as { message?: string; hint?: string };
@@ -143,6 +150,7 @@ interface ApplicationRow {
   resume_tailored?: boolean;
 }
 
+/** Converts a PostgREST application row into the extension's application model. */
 function toApplicationRecord(row: ApplicationRow): ApplicationRecord {
   const raw = row.tailored_resume;
   let tailoredResume: ResumeFields | null = null;
@@ -201,12 +209,14 @@ function normalizePostingUrl(url: string): string {
   }
 }
 
+/** Extracts a Greenhouse numeric job ID from a posting URL. */
 function greenhouseJobId(url: string | null): string | null {
   if (!url) return null;
   const match = url.match(/\/jobs\/(\d+)/i);
   return match?.[1] ?? null;
 }
 
+/** Removes common jobs-page and legal suffixes for fuzzy company matching. */
 function companyCore(name: string): string {
   return name
     .replace(/\b(jobs|careers|hiring|inc\.?|llc\.?|ltd\.?)\b/gi, "")
@@ -340,6 +350,7 @@ export async function findOrCreateApplication(input: {
   return toApplicationRecord(row);
 }
 
+/** Updates the saved job description for an existing application. */
 export async function updateJobDescription(applicationId: string, jobDescription: string): Promise<void> {
   await restRequest(`/applications?id=eq.${applicationId}`, {
     method: "PATCH",
@@ -376,6 +387,7 @@ export async function saveTailoredResume(
   });
 }
 
+/** Loads profile contact and application defaults for the signed-in user. */
 export async function loadProfile(): Promise<ProfileRecord | null> {
   const rows = await restRequest<
     {
@@ -401,6 +413,7 @@ export async function loadProfile(): Promise<ProfileRecord | null> {
   };
 }
 
+/** Calls the authenticated tailoring Edge Function and decodes its response. */
 async function callTailorFunction<T>(body: Record<string, unknown>): Promise<T> {
   const auth = await authHeaders();
   const response = await proxyFetch(`${functionsUrl}/tailor-resume`, {
@@ -417,6 +430,7 @@ async function callTailorFunction<T>(body: Record<string, unknown>): Promise<T> 
   return JSON.parse(response.body) as T;
 }
 
+/** Extracts a tailoring-service refusal message with a status fallback. */
 function refusalMessage(status: number, body: string): string {
   try {
     const parsed = JSON.parse(body) as { error?: string };
@@ -427,10 +441,12 @@ function refusalMessage(status: number, body: string): string {
   return `PrepFor.Me's tailoring service didn't respond (${status}).`;
 }
 
+/** Creates a tailored resume for the specified saved application. */
 export function tailorResume(applicationId: string): Promise<TailoringResult> {
   return callTailorFunction<TailoringResult>({ mode: "tailor", applicationId });
 }
 
+/** Adds user-confirmed skill context to an in-progress tailored resume. */
 export function enrichSkillGaps(
   applicationId: string,
   fields: ResumeFields,
@@ -439,6 +455,7 @@ export function enrichSkillGaps(
   return callTailorFunction<EnrichResult>({ mode: "enrich", applicationId, fields, briefs });
 }
 
+/** Applies a natural-language edit to the current tailored resume fields. */
 export function editTailoredResume(
   applicationId: string,
   fields: ResumeFields,

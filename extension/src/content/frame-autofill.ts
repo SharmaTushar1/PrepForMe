@@ -14,6 +14,7 @@ import type { ProfileRecord, ResumeFields } from "../lib/types";
 import type { ExtensionMessage } from "../lib/messages";
 import type { FillReport } from "./fill-core";
 
+/** Decodes a base64 payload into bytes suitable for a resume file attachment. */
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -21,6 +22,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+/** Fills this frame from an authenticated background-worker request. */
 function runFill(
   ats: AtsKind,
   fields: ResumeFields,

@@ -45,6 +45,7 @@ const ATS_LABEL: Record<AtsKind, string> = {
   generic: "Careers page",
 };
 
+/** Runs the extension's sign-in, tailoring, review, and autofill panel workflow. */
 export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: DetectedJob; onClose: () => void }) {
   const [step, setStep] = useState<Step>("checking");
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
@@ -66,12 +67,14 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
   const [savedTailored, setSavedTailored] = useState<ApplicationRecord | null>(null);
   const [lookingForSaved, setLookingForSaved] = useState(false);
 
+  /** Moves the panel into its ready state after a session becomes available. */
   function applySignedIn(email: string | null) {
     setSignedInEmail(email);
     setError(null);
     setStep((current) => (current === "checking" || current === "signedOut" ? "idle" : current));
   }
 
+  /** Clears an unusable session and returns the panel to its sign-in state. */
   async function forceSignIn(message?: string) {
     setSignedInEmail(null);
     setError(message ?? null);
@@ -79,6 +82,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
     await sendMessageSafe({ type: "CLEAR_SESSION" });
   }
 
+  /** Displays an operation error and routes authentication failures to sign-in. */
   function handleCaughtError(e: unknown, fallbackStep: Step) {
     setError(messageOf(e));
     if (isAuthFailure(e) || /session has expired/i.test(messageOf(e))) {
@@ -88,6 +92,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
     setStep(fallbackStep);
   }
 
+  /** Restores tailored fields and session details from a saved application. */
   function hydrateFromSaved(app: ApplicationRecord) {
     if (!app.tailoredResume) return;
     setApplication(app);
@@ -180,6 +185,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
 
   const templateId = application?.templateId ?? savedTailored?.templateId ?? profile?.defaultTemplateId ?? "classic";
 
+  /** Runs page autofill with the selected fields and records its report. */
   async function runAutofillWithFields(nextFields: ResumeFields, app: ApplicationRecord | null) {
     setStep("filling");
     try {
@@ -192,6 +198,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
     }
   }
 
+  /** Autofills immediately from a previously tailored resume without spending credits. */
   async function useSavedResume() {
     if (!savedTailored?.tailoredResume) return;
     setError(null);
@@ -199,6 +206,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
     await runAutofillWithFields(savedTailored.tailoredResume, savedTailored);
   }
 
+  /** Opens a previously tailored resume for review before autofilling. */
   async function reviewSavedResume() {
     if (!savedTailored?.tailoredResume) return;
     setError(null);
@@ -206,11 +214,13 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
     setStep("result");
   }
 
+  /** Autofills the page with the panel's current tailored fields. */
   async function runAutofillAfterTailor() {
     if (!fields) return;
     await runAutofillWithFields(fields, application);
   }
 
+  /** Saves the detected posting, tailors a resume, and advances the workflow. */
   async function startTailor() {
     setError(null);
     setStep("scanning");
@@ -253,6 +263,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
     }
   }
 
+  /** Enriches confirmed skill gaps, or skips them, before rendering and filling. */
   async function continueFromGaps(skip: boolean) {
     if (!application || !fields) return;
     setError(null);
@@ -281,6 +292,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
     }
   }
 
+  /** Applies and persists the requested edit to the current tailored resume. */
   async function applyTweak() {
     if (!application || !fields || !tweakText.trim()) return;
     setError(null);
@@ -305,6 +317,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
     }
   }
 
+  /** Starts autofill from the review screen when tailored fields are ready. */
   async function startAutofill() {
     if (!fields) return;
     setError(null);
@@ -447,6 +460,7 @@ export function App({ ats, initialJob, onClose }: { ats: AtsKind; initialJob: De
   );
 }
 
+/** Converts an unknown failure into actionable extension-facing copy. */
 function messageOf(e: unknown): string {
   if (!(e instanceof Error)) return "Something went wrong.";
   if (e.message === "Failed to fetch" || /NetworkError|Load failed/i.test(e.message)) {
@@ -455,6 +469,7 @@ function messageOf(e: unknown): string {
   return e.message;
 }
 
+/** Renders panel branding, ATS context, and the close control. */
 function Header({ onClose, ats, company }: { onClose: () => void; ats: AtsKind; company: string }) {
   return (
     <div
@@ -494,10 +509,12 @@ function Header({ onClose, ats, company }: { onClose: () => void; ats: AtsKind; 
   );
 }
 
+/** Centers transient panel content such as progress indicators. */
 function Centered({ children }: { children: React.ReactNode }) {
   return <div style={{ padding: "36px 8px", textAlign: "center" }}>{children}</div>;
 }
 
+/** Explains and starts the web-app sign-in handoff. */
 function SignedOutPanel({ onOpenSignIn }: { onOpenSignIn: () => void }) {
   return (
     <div style={{ textAlign: "center", padding: "20px 4px" }}>
@@ -515,6 +532,7 @@ function SignedOutPanel({ onOpenSignIn }: { onOpenSignIn: () => void }) {
   );
 }
 
+/** Shows detected job details and the available new or saved tailoring actions. */
 function IdlePanel({
   ats,
   job,
@@ -639,6 +657,7 @@ function IdlePanel({
   );
 }
 
+/** Collects optional evidence for skills missing from the base resume. */
 function GapReviewPanel({
   missingSkills,
   briefs,
@@ -682,6 +701,7 @@ function GapReviewPanel({
   );
 }
 
+/** Presents tailored changes, keyword coverage, PDF preview, and edit controls. */
 function ResultPanel({
   summary,
   changes,
@@ -814,6 +834,7 @@ function ResultPanel({
   );
 }
 
+/** Summarizes fields filled automatically and items that still need user review. */
 function DonePanel({
   report,
   company,

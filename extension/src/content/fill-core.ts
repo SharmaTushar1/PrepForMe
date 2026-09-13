@@ -17,6 +17,7 @@ export interface FillReport {
   sawGreenhouseForm?: boolean;
 }
 
+/** Splits a full name into the first token and the remaining family-name tokens. */
 export function splitName(fullName: string | null | undefined): { first: string; last: string } {
   const trimmed = (fullName ?? "").trim();
   if (!trimmed) return { first: "", last: "" };
@@ -71,6 +72,7 @@ export function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value
   el.dispatchEvent(new Event("blur", { bubbles: true }));
 }
 
+/** Selects the closest option whose text contains the requested value. */
 function setSelectValue(el: HTMLSelectElement, wantedText: string): boolean {
   const want = wantedText.trim().toLowerCase();
   if (!want) return false;
@@ -83,10 +85,12 @@ function setSelectValue(el: HTMLSelectElement, wantedText: string): boolean {
   return true;
 }
 
+/** Escapes an element ID for use in a CSS selector, including older browsers. */
 function cssEscape(id: string): string {
   return typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id.replace(/([^\w-])/g, "\\$1");
 }
 
+/** Resolves the best available human-readable label for a form field. */
 function labelFor(doc: Document, field: HTMLElement): string {
   const id = field.id;
   if (id) {
@@ -127,10 +131,12 @@ function labelFor(doc: Document, field: HTMLElement): string {
   return field.getAttribute("placeholder") || field.getAttribute("name") || "";
 }
 
+/** Normalizes label text for case-insensitive autofill rule matching. */
 function normalize(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/** Finds the first resume link matching any requested keyword. */
 function findLink(fields: ResumeFields, keywords: string[]): string | null {
   const links = fields.links ?? [];
   for (const link of links) {
@@ -170,6 +176,7 @@ const FLAG_RULES: RegExp[] = [
   /notice period/,
 ];
 
+/** Collects visible text and select controls that are safe to autofill. */
 function collectFields(doc: Document): FormField[] {
   return Array.from(doc.querySelectorAll<FormField>("input, textarea, select")).filter((el) => {
     if (el instanceof HTMLInputElement) {
@@ -186,6 +193,7 @@ function collectFields(doc: Document): FormField[] {
   });
 }
 
+/** Fills recognized controls from their labels and flags questions needing review. */
 function fillByLabel(doc: Document, ctx: FillContext, report: FillReport): void {
   for (const field of collectFields(doc)) {
     const label = normalize(labelFor(doc, field));
@@ -218,6 +226,7 @@ function fillByLabel(doc: Document, ctx: FillContext, report: FillReport): void 
   }
 }
 
+/** Fills Greenhouse's stable contact-field selectors before heuristic matching. */
 function fillGreenhouseFixedFields(doc: Document, ctx: FillContext, report: FillReport): void {
   const set = (selectors: string[], value: string | null | undefined, label: string) => {
     if (!value?.trim()) return;
@@ -274,6 +283,7 @@ function fillGreenhouseFixedFields(doc: Document, ctx: FillContext, report: Fill
   }
 }
 
+/** Attaches rendered PDF bytes to the most likely non-cover-letter file input. */
 export function attachResumeBytes(
   doc: Document,
   bytes: ArrayBuffer | Blob,
@@ -340,6 +350,7 @@ export function attachResumeBytes(
   }
 }
 
+/** Applies ATS-specific and label-based autofill rules to one document. */
 export function fillDocument(
   doc: Document,
   ats: AtsKind,
@@ -394,10 +405,12 @@ export function enrichFieldsForFill(
   };
 }
 
+/** Creates an empty mutable report for aggregating autofill results. */
 export function emptyReport(): FillReport {
   return { filled: [], flagged: [], noFormFound: false, inputsSeen: 0, sawGreenhouseForm: false };
 }
 
+/** Merges unique filled and flagged entries plus frame diagnostics into a report. */
 export function mergeReports(into: FillReport, from: FillReport): void {
   for (const label of from.filled) {
     if (!into.filled.includes(label)) into.filled.push(label);

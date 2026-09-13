@@ -26,6 +26,7 @@ interface StoredSupabaseSession {
   user?: { email?: string | null };
 }
 
+/** Parses a Supabase local-storage value into the extension's session shape. */
 function parseStored(raw: string): BridgeSession | null {
   try {
     const parsed = JSON.parse(raw) as StoredSupabaseSession & { currentSession?: StoredSupabaseSession };
@@ -42,6 +43,7 @@ function parseStored(raw: string): BridgeSession | null {
   }
 }
 
+/** Finds the current Supabase session among the web app's local-storage entries. */
 function readSessionFromLocalStorage(): BridgeSession | null {
   for (let i = 0; i < window.localStorage.length; i++) {
     const key = window.localStorage.key(i);
@@ -57,6 +59,7 @@ function readSessionFromLocalStorage(): BridgeSession | null {
 
 let lastSent: string | null = null;
 
+/** Relays a changed web-app session to the extension background worker. */
 function syncOnce(): void {
   const session = readSessionFromLocalStorage();
   const fingerprint = session ? `${session.accessToken}:${session.expiresAt}` : null;

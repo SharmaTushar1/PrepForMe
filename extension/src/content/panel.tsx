@@ -11,6 +11,7 @@ import { Root } from "../panel/Root";
 
 const HOST_ID = "prepforme-extension-root";
 
+/** Mounts the extension panel into an isolated shadow root once per page. */
 function mount(): void {
   if (document.getElementById(HOST_ID)) return;
 

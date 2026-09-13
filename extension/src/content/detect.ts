@@ -20,6 +20,7 @@ export interface DetectedJob {
 
 const MAX_JD_CHARS = 12_000;
 
+/** Detects Greenhouse from either the current host or its embedded application root. */
 function isGreenhouse(): boolean {
   const host = window.location.hostname;
   if (/(^|\.)greenhouse\.io$/.test(host)) return true;
@@ -37,11 +38,13 @@ function looksLikeApplicationForm(): boolean {
   return hasResumeMention && hasApplyMention;
 }
 
+/** Classifies the page as a supported ATS application or an unsupported page. */
 export function detectAts(): AtsKind | null {
   if (isGreenhouse()) return "greenhouse";
   return looksLikeApplicationForm() ? "generic" : null;
 }
 
+/** Reads and trims a named Open Graph or standard metadata value. */
 function meta(name: string): string | null {
   const el =
     document.querySelector(`meta[property="${name}"]`) ??
@@ -49,6 +52,7 @@ function meta(name: string): string | null {
   return el?.getAttribute("content")?.trim() || null;
 }
 
+/** Derives a human-readable company fallback from the current hostname. */
 function companyFromHost(): string {
   const host = window.location.hostname.replace(/^www\./, "");
   const first = host.split(".")[0];
@@ -59,6 +63,7 @@ function companyFromHost(): string {
   return capitalize(first);
 }
 
+/** Uppercases the first character of a non-empty string. */
 function capitalize(s: string): string {
   return s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
@@ -84,6 +89,7 @@ function splitTitle(title: string): { role: string; company: string } | null {
   return null;
 }
 
+/** Extracts company, role, and job-description text from a Greenhouse page. */
 function scrapeGreenhouse(): { company: string; role: string; jobDescription: string } {
   const role =
     document.querySelector("h1")?.textContent?.trim() ||
@@ -108,6 +114,7 @@ function scrapeGreenhouse(): { company: string; role: string; jobDescription: st
   };
 }
 
+/** Extracts best-effort job details from a generic application page. */
 function scrapeGeneric(): { company: string; role: string; jobDescription: string } {
   const title = meta("og:title") || document.title.trim();
   const split = splitTitle(title);
@@ -150,6 +157,7 @@ function extractText(root: Element): string {
   return collapsed.slice(0, MAX_JD_CHARS);
 }
 
+/** Produces the detected job record consumed by the extension panel. */
 export function scrapeJob(ats: AtsKind): DetectedJob {
   const scraped = ats === "greenhouse" ? scrapeGreenhouse() : scrapeGeneric();
   return {

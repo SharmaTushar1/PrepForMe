@@ -23,11 +23,13 @@ interface PendingSignIn {
   startedAt: number;
 }
 
+/** Reads the extension's persisted Supabase session, if one is available. */
 async function readSession(): Promise<BridgeSession | null> {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   return (stored[STORAGE_KEY] as BridgeSession | undefined) ?? null;
 }
 
+/** Persists a Supabase session, or removes the stored session when signed out. */
 async function writeSession(session: BridgeSession | null): Promise<void> {
   if (session) {
     await chrome.storage.local.set({ [STORAGE_KEY]: session });
@@ -36,11 +38,13 @@ async function writeSession(session: BridgeSession | null): Promise<void> {
   }
 }
 
+/** Reads the tab handoff recorded while an extension sign-in is in progress. */
 async function readPendingSignIn(): Promise<PendingSignIn | null> {
   const stored = await chrome.storage.local.get(PENDING_SIGN_IN_KEY);
   return (stored[PENDING_SIGN_IN_KEY] as PendingSignIn | undefined) ?? null;
 }
 
+/** Persists or clears the pending extension sign-in handoff. */
 async function writePendingSignIn(pending: PendingSignIn | null): Promise<void> {
   if (pending) {
     await chrome.storage.local.set({ [PENDING_SIGN_IN_KEY]: pending });
@@ -51,6 +55,7 @@ async function writePendingSignIn(pending: PendingSignIn | null): Promise<void> 
 
 let refreshInFlight: Promise<BridgeSession | null> | null = null;
 
+/** Refreshes an expired Supabase session while deduplicating concurrent attempts. */
 async function refresh(session: BridgeSession): Promise<BridgeSession | null> {
   if (refreshInFlight) return refreshInFlight;
 
@@ -157,6 +162,7 @@ async function pullSessionFromAppTabs(): Promise<BridgeSession | null> {
   return null;
 }
 
+/** Returns a usable session, recovering it from app tabs or refreshing it when needed. */
 async function getSession(): Promise<GetSessionResponse> {
   let session = await readSession();
   if (!session) {
@@ -187,6 +193,7 @@ async function getSession(): Promise<GetSessionResponse> {
   return { ok: true, accessToken: refreshed.accessToken, userEmail: refreshed.userEmail };
 }
 
+/** Checks whether a URL belongs to an allowlisted Supabase or PrepFor.Me API origin. */
 function isAllowedProxyUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -202,6 +209,7 @@ function isAllowedProxyUrl(url: string): boolean {
   }
 }
 
+/** Proxies an authenticated request to an allowlisted API on behalf of a content script. */
 async function proxyFetch(message: Extract<ExtensionMessage, { type: "PROXY_FETCH" }>): Promise<ProxyFetchResponse> {
   if (!isConfigured) {
     return {
@@ -241,12 +249,14 @@ async function proxyFetch(message: Extract<ExtensionMessage, { type: "PROXY_FETC
   }
 }
 
+/** Builds the web-app sign-in URL with the extension return-flow marker. */
 function signInUrlWithFlag(): string {
   const url = new URL(signInUrl);
   url.searchParams.set("from", "extension");
   return url.toString();
 }
 
+/** Notifies open tabs that the extension has received a signed-in session. */
 async function broadcastSessionReady(email: string | null): Promise<void> {
   const message = { type: "SESSION_READY", email } satisfies ExtensionMessage;
   const tabs = await chrome.tabs.query({});
@@ -262,6 +272,7 @@ async function broadcastSessionReady(email: string | null): Promise<void> {
   );
 }
 
+/** Completes the sign-in handoff and returns focus to the originating job tab. */
 async function completeSignInReturn(session: BridgeSession): Promise<void> {
   const pending = await readPendingSignIn();
   if (!pending) {
@@ -292,6 +303,7 @@ async function completeSignInReturn(session: BridgeSession): Promise<void> {
   await broadcastSessionReady(session.userEmail);
 }
 
+/** Opens the trusted sign-in page and records the job tab to restore afterward. */
 async function startSignIn(returnTabId?: number): Promise<StartSignInResponse> {
   const jobTabId = returnTabId ?? (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id;
   if (!jobTabId) {
@@ -321,6 +333,7 @@ async function startSignIn(returnTabId?: number): Promise<StartSignInResponse> {
   return { ok: true };
 }
 
+/** Stores a session relayed by the web app and completes any pending handoff. */
 async function onSessionFromWebapp(session: BridgeSession | null): Promise<void> {
   await writeSession(session);
   if (session) {

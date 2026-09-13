@@ -323,7 +323,7 @@ export function CompanyPrepTab({ app, apps }: { app: DecoratedApp; apps: Decorat
             <TextInput
               value={domainDraft}
               onChange={setDomainDraft}
-              placeholder="abnormal.ai"
+              placeholder="google.com"
               ariaLabel="Company domain"
               style={{ flex: 1 }}
             />

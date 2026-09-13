@@ -4,7 +4,7 @@
 [PROJECT.md](PROJECT.md), which holds strategy, scope, and decisions. Update this file
 whenever the stack, schema, hosting, or environment changes.*
 
-**Last updated:** 7 Aug 2026
+**Last updated:** 13 Sep 2026
 
 ---
 
@@ -93,7 +93,7 @@ ones there or TypeScript won't know them.
 | `ANTHROPIC_MODEL` | optional override; defaults to `claude-sonnet-5` | same |
 | `ANTHROPIC_EFFORT` | optional; `low`\|`medium`\|`high`\|`xhigh`\|`max`, defaults to `medium`. An unrecognised value is logged and ignored rather than passed through to a 400. Dropped entirely for models that reject it — see §10 | same |
 | `ANTHROPIC_EXTRACT_MODEL`, `ANTHROPIC_CHAT_MODEL` | optional; both default to `claude-haiku-4-5-20251001`. Claim extraction, relevance checks, PDF text extraction and prep chat, none of which need Sonnet | same |
-| `ANTHROPIC_BASE_URL` | optional; defaults to `https://api.anthropic.com`. Points the analyzer at [the stub](#the-analyze-resume-edge-function) or an egress proxy | same |
+| `ANTHROPIC_BASE_URL` | optional; defaults to `https://api.anthropic.com`. Local Ollama uses `http://host.docker.internal:8788` via [`_stub/ollama-bridge.ts`](supabase/functions/_stub/ollama-bridge.ts) | same |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | injected by the functions runtime | nowhere — they arrive on their own |
 
 **Neither Anthropic variable may ever gain a `VITE_` prefix.** That is the whole
@@ -169,9 +169,33 @@ supabase functions serve --env-file supabase/.env.local
 That file holds `ANTHROPIC_API_KEY`. It is gitignored, and the key must never be
 copied anywhere with a `VITE_` prefix.
 
-To drive either function without spending anything, serve with `supabase/.env.stub`
-instead and run [`_stub/anthropic.ts`](supabase/functions/_stub/anthropic.ts) alongside
-it — but read the shared-container gotcha in §10 before you switch back.
+### Local LLM (Ollama) vs your own API keys
+
+The hosted app can charge for cloud inference. Self-host (or `npm run dev`) can
+use **your** Anthropic key (`supabase/.env.local`) or a **local Ollama** model
+via the Anthropic→OpenAI bridge. All generation functions already read
+`ANTHROPIC_BASE_URL`; embeddings still go to OpenAI (`OPENAI_API_KEY`).
+
+**Ollama (no Anthropic bill).** Pick the strongest Ollama tag that still feels
+fast on your machine for resume analysis, tailoring, and prep chat — not only
+chat. What we used: `qwen2.5:7b` on a MacBook Pro with 64GB (M1 Max), and the
+same tag on an M4 Max; resume parsing and the other AI surfaces stayed usable.
+
+```bash
+ollama pull <your-model-tag>
+cp supabase/.env.ollama.example supabase/.env.ollama   # set ANTHROPIC_MODEL + optional OPENAI_API_KEY
+deno run --allow-net --allow-env supabase/functions/_stub/ollama-bridge.ts
+# other terminal:
+supabase functions serve --env-file supabase/.env.ollama
+```
+
+The bridge listens on `:8788`. Functions inside Docker reach it at
+`http://host.docker.internal:8788`. `ECONNREFUSED` there means the bridge is
+down. The model name the functions send (`ANTHROPIC_MODEL`) wins over a stale
+`OLLAMA_MODEL` in the shell.
+
+Switch backends by stopping `functions serve` and starting the other `--env-file`.
+One serve at a time.
 
 **Status: switched on, and that is a live spending risk.**
 `.env.development.local` sets `VITE_AI_PROVIDER=edge`, so with the functions served,
@@ -821,6 +845,10 @@ Six things a new environment needs:
 ## 10. Gotchas
 
 Things that have already cost time, or will.
+
+- **Ollama model tag must be pulled and reachable.** A 404 from Ollama is a tag
+  in `ANTHROPIC_MODEL` (or a shell `OLLAMA_MODEL` override) that is not installed.
+  `ECONNREFUSED` on `host.docker.internal:8788` means the bridge process is down.
 
 - **Resume PDF is a Vercel Node function, not an Edge Function.** `api/render-resume-pdf.ts`
   uses `puppeteer-core` + `@sparticuz/chromium-min` (not the full chromium package). The

@@ -77,7 +77,7 @@ export interface Application {
   level: string | null;
   stage: Stage;
   postingUrl: string | null;
-  /** Confirmed domain for first-party URL detection, e.g. abnormal.ai */
+  /** Confirmed domain for first-party URL detection, e.g. google.com */
   companyDomain: string | null;
   /** Catalog company slug when picked; null = custom. */
   companyId: string | null;

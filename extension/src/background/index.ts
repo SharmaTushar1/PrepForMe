@@ -199,10 +199,15 @@ function isAllowedProxyUrl(url: string): boolean {
     const parsed = new URL(url);
     const supabase = new URL(supabaseUrl);
     const api = new URL(apiBaseUrl);
+    // https everywhere, plus plain http for a local Supabase / dev server —
+    // the local stack (127.0.0.1:54321) and `npm run dev` (localhost:5173)
+    // are http, and refusing them here is what makes a locally-built
+    // extension fail every call before it leaves the worker.
+    const localHttpOk = (u: URL) =>
+      u.protocol === "https:" || u.hostname === "localhost" || u.hostname === "127.0.0.1";
     return (
-      (parsed.origin === supabase.origin && parsed.protocol === "https:") ||
-      (parsed.origin === api.origin &&
-        (parsed.protocol === "https:" || parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1"))
+      (parsed.origin === supabase.origin && localHttpOk(parsed)) ||
+      (parsed.origin === api.origin && localHttpOk(parsed))
     );
   } catch {
     return false;

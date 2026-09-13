@@ -36,7 +36,7 @@ Phase 5 reach ────░░░░░░  not started
 
 ## Doesn't exist yet
 
-Confidence number in UI · Discover job feeds · Practice · browser extension · Sentry / PostHog / Resend · catalog merge-votes · full LinkedIn org-id coverage.
+Confidence number in UI · Discover job feeds · Practice · Sentry / PostHog / Resend · catalog merge-votes · full LinkedIn org-id coverage. Browser extension exists (`extension/`, Greenhouse + generic autofill) but LinkedIn/Workday/Lever field-mapping doesn't yet.
 
 ---
 

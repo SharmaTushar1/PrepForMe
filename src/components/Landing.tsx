@@ -85,8 +85,8 @@ export function Landing() {
             <a href="#how" style={css("font-size:14px; color:oklch(0.4 0.015 260);")}>How it works</a>
             <a href="#features" style={css("font-size:14px; color:oklch(0.4 0.015 260);")}>Features</a>
             <a href="#dossier" style={css("font-size:14px; color:oklch(0.4 0.015 260);")}>Company prep</a>
-            <a href="#reviews" style={css("font-size:14px; color:oklch(0.4 0.015 260);")}>Reviews</a>
-            <a href="#pricing" style={css("font-size:14px; color:oklch(0.4 0.015 260);")}>Pricing</a>
+            {/* <a href="#reviews" style={css("font-size:14px; color:oklch(0.4 0.015 260);")}>Reviews</a> */}
+            {/* <a href="#pricing" style={css("font-size:14px; color:oklch(0.4 0.015 260);")}>Pricing</a> */}
           </div>
           <div style={css("margin-left:auto; display:flex; align-items:center; gap:14px;")}>
             <button onClick={openContact} style={css("font-family:'IBM Plex Sans'; font-size:14px; font-weight:500; background:none; border:none; color:oklch(0.4 0.015 260); cursor:pointer;")}>Contact</button>
@@ -108,6 +108,7 @@ export function Landing() {
             <button onClick={getStarted} style={css("font-family:'IBM Plex Sans'; font-size:15px; font-weight:600; color:#fff; background:oklch(0.55 0.15 255); border:none; padding:14px 24px; border-radius:11px; cursor:pointer; box-shadow:0 10px 24px -12px oklch(0.55 0.15 255 / 0.8);")}>Start with your resume</button>
             <button onClick={signIn} style={css("font-family:'IBM Plex Sans'; font-size:15px; font-weight:600; color:oklch(0.3 0.02 260); background:#fff; border:1px solid oklch(0.88 0.006 260); padding:14px 22px; border-radius:11px; cursor:pointer;")}>Sign in →</button>
           </div>
+          {/* unverified outcome claims — restore when we have real numbers
           <div style={css("display:flex; gap:26px; margin-top:34px;")}>
             <div><div style={css("font-family:'Space Grotesk'; font-size:24px; font-weight:600;")}>2.4×</div><div style={css("font-size:12.5px; color:oklch(0.5 0.015 260);")}>higher response rate</div></div>
             <div style={css("width:1px; background:oklch(0.9 0.006 260);")}></div>
@@ -115,6 +116,7 @@ export function Landing() {
             <div style={css("width:1px; background:oklch(0.9 0.006 260);")}></div>
             <div><div style={css("font-family:'Space Grotesk'; font-size:24px; font-weight:600;")}>100%</div><div style={css("font-size:12.5px; color:oklch(0.5 0.015 260);")}>your real experience</div></div>
           </div>
+          */}
         </div>
 
         {/* animated walkthrough */}
@@ -189,13 +191,14 @@ export function Landing() {
         </div>
       </div>
 
-      {/* trust strip */}
+      {/* unverified company claims
       <div style={css("max-width:1200px; margin:0 auto; padding:30px 32px 10px;")}>
         <div style={css("font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:oklch(0.6 0.01 260); text-align:center; margin-bottom:18px;")}>Candidates prep for roles at</div>
         <div style={css("display:flex; justify-content:center; gap:44px; flex-wrap:wrap; opacity:0.55; font-family:'Space Grotesk'; font-weight:600; font-size:18px; color:oklch(0.4 0.015 260);")}>
           <span>Stripe</span><span>McKinsey</span><span>Michael Page</span><span>Salesforce</span><span>Notion</span><span>Deloitte</span><span>Datadog</span>
         </div>
       </div>
+      */}
 
       {/* how it works */}
       <div id="how" style={css("max-width:1200px; margin:0 auto; padding:80px 32px 40px;")}>
@@ -208,7 +211,8 @@ export function Landing() {
           {[
             ["01", "Upload your resume", "We parse it into a structured profile — every bullet an editable object. You edit, never type from scratch."],
             ["02", "Tailor to each role", "Paste a JD. Get a truthfully tailored variant plus an ATS keyword-gap view — with the diff of what changed and why."],
-            ["03", "Build company prep", "A per-company knowledge base you can chat with — built from first-party sources and interview recaps of thousands of candidates."],
+            ["03", "Build company prep", "A per-company knowledge base you can chat with — built from first-party sources and your interview recaps."],
+            // ["03", "Build company prep", "A per-company knowledge base you can chat with — built from first-party sources and interview recaps of thousands of candidates."],
             ["04", "Recap & compound", "After each interview, log what was asked. Every recap makes the next round — and the next candidate-you — sharper."],
           ].map(([n, title, body]) => (
             <div key={n} style={css("background:#fff; border:1px solid oklch(0.9 0.006 260); border-radius:14px; padding:22px;")}>
@@ -287,7 +291,7 @@ export function Landing() {
         </div>
       </div>
 
-      {/* reviews */}
+      {/* unverified testimonials
       <div id="reviews" style={css("max-width:1200px; margin:0 auto; padding:80px 32px;")}>
         <div style={css("text-align:center; margin-bottom:44px;")}>
           <div style={css("font-family:'IBM Plex Mono'; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:oklch(0.4 0.13 255); margin-bottom:12px;")}>From the war room</div>
@@ -307,8 +311,9 @@ export function Landing() {
           ))}
         </div>
       </div>
+      */}
 
-      {/* pricing */}
+      {/* pricing — hidden until we ship paid plans
       <div id="pricing" style={css("max-width:1100px; margin:0 auto; padding:56px 32px 80px;")}>
         <div style={css("text-align:center; margin-bottom:44px;")}>
           <div style={css("font-family:'IBM Plex Mono'; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:oklch(0.4 0.13 255); margin-bottom:12px;")}>Pricing</div>
@@ -346,6 +351,7 @@ export function Landing() {
           </div>
         </div>
       </div>
+      */}
 
       {/* privacy band */}
       <div style={css("max-width:1200px; margin:0 auto; padding:0 32px 70px;")}>
@@ -366,7 +372,8 @@ export function Landing() {
         <div style={css("max-width:1200px; margin:0 auto; padding:72px 32px; text-align:center;")}>
           <h2 style={css("font-family:'Space Grotesk'; font-size:40px; font-weight:600; letter-spacing:-0.02em; margin:0 0 14px;")}>Walk into every interview knowing the company cold.</h2>
           <p style={css("font-size:17px; opacity:0.85; margin:0 0 28px;")}>Upload your resume. Your first tailored application takes about five minutes.</p>
-          <button onClick={getStarted} style={css("font-family:'IBM Plex Sans'; font-size:16px; font-weight:600; color:oklch(0.4 0.13 255); background:#fff; border:none; padding:15px 30px; border-radius:12px; cursor:pointer;")}>Get started free</button>
+          <button onClick={getStarted} style={css("font-family:'IBM Plex Sans'; font-size:16px; font-weight:600; color:oklch(0.4 0.13 255); background:#fff; border:none; padding:15px 30px; border-radius:12px; cursor:pointer;")}>Get started</button>
+          {/* <button onClick={getStarted} style={css("font-family:'IBM Plex Sans'; font-size:16px; font-weight:600; color:oklch(0.4 0.13 255); background:#fff; border:none; padding:15px 30px; border-radius:12px; cursor:pointer;")}>Get started free</button> */}
         </div>
       </div>
 

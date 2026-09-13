@@ -5,7 +5,7 @@
 **Live:** https://prep-for-me.vercel.app/ (currently a basic CRUD skeleton — build in progress)
 **Stage:** pre-v1, targeting 10–20 friends-and-family testers.
 **Technical detail:** [TECHNICAL.md](TECHNICAL.md) — stack, schema, hosting, deploy, gotchas.
-**Last updated:** 7 Aug 2026 (prod PDF render fix)
+**Last updated:** 13 Sep 2026 (open-source / self-host AI: Ollama or own API keys)
 
 ---
 
@@ -31,9 +31,11 @@ What exists in the repo today, as distinct from what's planned below.
 
 **Company prep RAG, new:** paste notes, URL (robots.txt gate), or PDF → extract restated atomic claims (never verbatim page text) → embed with OpenAI → retrieve in prep chat with provenance. Chat is multi-turn (last 8 messages), citations are clickable, Save to prep suggests claims from the exchange. Company facts from first-party/news can share immediately; interview claims stay private until candidate corroboration. Prep panel counts company-scope sibling sources and shared claims. **Catalog-first add-role** (typeahead company/role, generic levels, specialty/employment type) feeds stable prep slugs and cleaner LinkedIn search. See §16 and [PHASE3_SPEC.md](PHASE3_SPEC.md).
 
-**Still not real:** JD tailoring and referral drafts still run the local mock. Also absent: Discover's job feeds, Practice, the browser extension. Each says so on screen rather than pretending.
+**Still not real:** referral drafts still run the local mock. Also absent: Discover's job feeds, Practice. Each says so on screen rather than pretending. The browser extension (`extension/`) is real but young: Greenhouse + generic-site autofill only — including company career sites that embed Greenhouse in a cross-origin iframe (fills via an `all_frames` script on `*.greenhouse.io`). **Later (extension):** generate a cover letter in-panel from resume + JD (see `extension/README.md` → Later).
 
 **Scale caveat:** single-user-per-account, no test suite, no CI, no linter, one 677 kB bundle. Appropriate for 10–20 testers, not beyond.
+
+**Self-host vs hosted:** the repo is intended as open source. A future hosted instance can charge for cloud models and ops. Locally you can run the same Edge Functions against **Ollama** (Anthropic-shaped bridge in `_stub/ollama-bridge.ts`) or against **your own** Anthropic/OpenAI keys. Setup is in [README.md](README.md#running-ai-locally).
 
 ---
 
@@ -76,7 +78,9 @@ The moat is **not** automation (commoditized, legally fraught). It's the **per-a
 - **Interview notes capture:** quick structured log; visibly strengthens the prep space.
 
 **v2 — convenience & reach**
-- Browser extension (autofill in the user's own session; human submits).
+- ~~Browser extension (autofill in the user's own session; human submits).~~ Shipped
+  in `extension/` for Greenhouse + generic sites (label-matching heuristics). LinkedIn
+  Easy Apply, Workday, and Lever still need their own field-mapping.
 - Job discovery: pull roles from public ATS feeds, semantically rank vs profile.
 
 **Later / premium**
@@ -211,6 +215,7 @@ Prep over volume; truthful by design; human always acts (never auto-submits/send
 
 *Major changes only, going forward.*
 
+- **13 Sep 2026 — Open source / self-host AI.** Hosted can be paid later; local stays yours. Generation functions already take `ANTHROPIC_BASE_URL`, so the same serve path hits Anthropic or a local Ollama model. Pick the strongest tag that still feels fast for analysis, tailor, and prep chat; `qwen2.5:7b` is what we used on a 64GB M1 Max MacBook Pro and on an M4 Max. Bridge: `_stub/ollama-bridge.ts`. Docs: README “Running AI locally”, TECHNICAL.md §4. Landing page pricing and unverified outcome claims commented out until we have real numbers.
 - **7 Aug 2026 — Prod PDF download was dead on arrival.** `/api/render-resume-pdf` returned Vercel's `FUNCTION_INVOCATION_FAILED` (text/plain) for every call — the UI mapped that to "Could not render the PDF." Three stacked causes: (1) full `@sparticuz/chromium` blew the serverless size budget → `@sparticuz/chromium-min` + remote x64 pack. (2) with root `"type": "module"`, importing the Vite `src/` tree crashed the isolate at boot → renderer inlined in the API file. (3) `@supabase/supabase-js` in the function spun up Realtime and threw "Node.js 20 detected without native WebSocket support" → auth is now a plain `/auth/v1/user` fetch. Also read `VITE_SUPABASE_PUBLISHABLE_KEY`.
 - **6 Aug 2026 — Follow-up edit on a tailored resume.** Materials gets a free-text "Tweak this version" box after fields exist. `tailor-resume` `mode: "edit"` + `constrainEdit` apply only instruction-named fields; does not re-tailor for the JD. Same `tailor` quota with confirm. Contact mismatches vs spine are soft so deliberate email/phone edits can still download.
 - **5 Aug 2026 — Tailor spine gap closed + relevance weighting.** Migration `0011`: profile `phone`/`location`/`links`/`summary` plus `education`/`projects`/`certifications` (with line children). Onboarding confirm writes those sections; `loadSpine` queries them (with `resume_reports.parsed` fallback for older accounts). `TAILOR_SYSTEM` now weighs must-have vs nice-to-have per item, never by section, and logs omissions in `changes`; enrich briefs add only.

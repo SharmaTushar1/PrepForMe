@@ -308,7 +308,7 @@ export function RoleDialog({ application, onClose }: Props) {
           <TextInput
             value={companyDomain}
             onChange={setCompanyDomain}
-            placeholder="abnormal.ai"
+            placeholder="google.com"
           />
         </div>
 

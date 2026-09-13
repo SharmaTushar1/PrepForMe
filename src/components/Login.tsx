@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { css } from "../css";
 import { LogoMark } from "./Logo";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { ROUTES } from "../routes";
+import { useSession } from "../auth/SessionProvider";
 import { FieldLabel, PrimaryButton, Spinner, TextInput } from "./ui";
 
 type Status = "idle" | "sending" | "sent" | "oauth" | "error";
@@ -14,9 +15,22 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  const { session, loading } = useSession();
+  const navigate = useNavigate();
+  const fromExtension = new URLSearchParams(window.location.search).get("from") === "extension";
 
   const valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
-  const redirectTo = `${window.location.origin}${ROUTES.home}`;
+  // Keep the extension flag through OAuth / magic-link so the bridge can poll
+  // faster and hand control back to the job tab.
+  const redirectTo = fromExtension
+    ? `${window.location.origin}${ROUTES.home}?from=extension`
+    : `${window.location.origin}${ROUTES.home}`;
+
+  useEffect(() => {
+    if (loading || !session) return;
+    if (fromExtension) return; // stay put — extension bridge syncs and closes this tab
+    navigate(ROUTES.home, { replace: true });
+  }, [loading, session, fromExtension, navigate]);
 
   async function sendLink() {
     if (!valid || status === "sending" || status === "oauth") return;
@@ -68,7 +82,19 @@ export function Login() {
             </div>
           )}
 
-          {status === "sent" ? (
+          {fromExtension && session ? (
+            <div style={css("text-align:center;")}>
+              <div style={css("display:flex; justify-content:center; margin-bottom:18px;")}>
+                <Spinner size={28} />
+              </div>
+              <h1 style={css("font-family:'Space Grotesk'; font-size:21px; font-weight:600; margin:0 0 8px;")}>
+                You're signed in
+              </h1>
+              <p style={css("font-size:13.5px; color:oklch(0.45 0.015 260); line-height:1.6; margin:0;")}>
+                Returning you to the job page — you can close this tab if it stays open.
+              </p>
+            </div>
+          ) : status === "sent" ? (
             <div style={css("text-align:center;")}>
               <div style={css("width:56px;height:56px;border-radius:16px;background:oklch(0.55 0.13 145 / 0.12);color:oklch(0.45 0.13 145);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:26px;")}>✓</div>
               <h1 style={css("font-family:'Space Grotesk'; font-size:21px; font-weight:600; margin:0 0 8px;")}>Check your email.</h1>

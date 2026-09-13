@@ -15,7 +15,7 @@ alter table public.applications
   add column if not exists company_domain text;
 
 comment on column public.applications.company_domain is
-  'Confirmed registrable domain for first-party detection (e.g. abnormal.ai). Guessed from posting_url; user confirms.';
+  'Confirmed registrable domain for first-party detection (e.g. google.com). Guessed from posting_url; user confirms.';
 
 -- --------------------------------------------------------- prep_sources cols
 

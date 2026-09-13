@@ -11,3 +11,4 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.ollama.example

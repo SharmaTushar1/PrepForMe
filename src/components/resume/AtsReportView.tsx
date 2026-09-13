@@ -93,9 +93,9 @@ export function AtsReportView({
           <p style={css("font-size:14px; line-height:1.65; color:oklch(0.3 0.015 260); margin:0;")}>
             {report.summary}
           </p>
-          <div style={css("font-family:'IBM Plex Mono'; font-size:11px; color:oklch(0.55 0.015 260); margin-top:12px;")}>
+          {/* <div style={css("font-family:'IBM Plex Mono'; font-size:11px; color:oklch(0.55 0.015 260); margin-top:12px;")}>
             scored by {analysis.model}
-          </div>
+          </div> */}
         </div>
       </div>
 

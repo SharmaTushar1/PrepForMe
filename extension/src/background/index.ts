@@ -53,18 +53,48 @@ async function writePendingSignIn(pending: PendingSignIn | null): Promise<void> 
   }
 }
 
+let sessionMutationQueue: Promise<void> = Promise.resolve();
 let refreshInFlight: Promise<BridgeSession | null> | null = null;
+
+/** Serializes session writes so a refresh cannot overwrite a newer web-app session. */
+function queueSessionMutation<T>(mutation: () => Promise<T>): Promise<T> {
+  const result = sessionMutationQueue.then(mutation);
+  sessionMutationQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+/** Checks whether storage still contains the session that requested a refresh. */
+function sessionsMatch(left: BridgeSession, right: BridgeSession): boolean {
+  return (
+    left.accessToken === right.accessToken &&
+    left.refreshToken === right.refreshToken &&
+    left.expiresAt === right.expiresAt &&
+    left.userEmail === right.userEmail
+  );
+}
 
 /** Refreshes an expired Supabase session while deduplicating concurrent attempts. */
 async function refresh(session: BridgeSession): Promise<BridgeSession | null> {
   if (refreshInFlight) return refreshInFlight;
 
-  refreshInFlight = (async () => {
+  refreshInFlight = queueSessionMutation(async () => {
     try {
+      const current = await readSession();
+      if (!current) return null;
+      if (
+        !sessionsMatch(current, session) &&
+        current.expiresAt - Math.floor(Date.now() / 1000) > REFRESH_SKEW_SECONDS
+      ) {
+        return current;
+      }
+
       const response = await fetch(`${authUrl}/token?grant_type=refresh_token`, {
         method: "POST",
         headers: { "content-type": "application/json", apikey: supabaseKey },
-        body: JSON.stringify({ refresh_token: session.refreshToken }),
+        body: JSON.stringify({ refresh_token: current.refreshToken }),
       });
       if (!response.ok) return null;
       const body = (await response.json()) as {
@@ -78,14 +108,14 @@ async function refresh(session: BridgeSession): Promise<BridgeSession | null> {
         accessToken: body.access_token,
         refreshToken: body.refresh_token,
         expiresAt: body.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
-        userEmail: body.user?.email ?? session.userEmail,
+        userEmail: body.user?.email ?? current.userEmail,
       };
       await writeSession(next);
       return next;
     } finally {
       refreshInFlight = null;
     }
-  })();
+  });
 
   return refreshInFlight;
 }
@@ -152,7 +182,7 @@ async function pullSessionFromAppTabs(): Promise<BridgeSession | null> {
           expiresAt: result.expiresAt,
           userEmail: result.userEmail,
         };
-        await writeSession(session);
+        await queueSessionMutation(() => writeSession(session));
         return session;
       }
     } catch {
@@ -340,7 +370,7 @@ async function startSignIn(returnTabId?: number): Promise<StartSignInResponse> {
 
 /** Stores a session relayed by the web app and completes any pending handoff. */
 async function onSessionFromWebapp(session: BridgeSession | null): Promise<void> {
-  await writeSession(session);
+  await queueSessionMutation(() => writeSession(session));
   if (session) {
     await completeSignInReturn(session);
   }
@@ -438,7 +468,7 @@ async function autofillAllFrames(
           // Include frames matching top origin or known ATS hosts.
           if (
             (topOriginObj && frameUrl.origin === topOriginObj.origin) ||
-            /greenhouse\.io$/i.test(frameUrl.hostname)
+            /(^|\.)greenhouse\.io$/i.test(frameUrl.hostname)
           ) {
             targetFrameIds.push(frame.frameId);
           }
@@ -641,7 +671,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
     return true;
   }
   if (message.type === "CLEAR_SESSION") {
-    writeSession(null).then(() => sendResponse({ ok: true }));
+    queueSessionMutation(() => writeSession(null)).then(() => sendResponse({ ok: true }));
     return true;
   }
   if (message.type === "PROXY_FETCH") {

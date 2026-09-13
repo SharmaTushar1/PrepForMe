@@ -57,7 +57,7 @@ tells you what's missing — so a blank env file never crashes anything.
 | Supabase stack | `supabase start` | auth, DB, storage |
 | Vite | `npm run dev` | the web app |
 | Functions | `supabase functions serve --env-file …` | any real AI (analyze, tailor, prep chat) |
-| Model backend | Ollama + bridge, **or** Anthropic via `.env.local` | what the functions call |
+| Model backend | Ollama + bridge, **or** Anthropic via `supabase/.env.local` | what the functions call |
 
 ### First-time Supabase setup
 
@@ -67,8 +67,8 @@ tells you what's missing — so a blank env file never crashes anything.
    the tables exist and every query still fails with `42501`
    ([why](TECHNICAL.md#7-migrations-and-the-grants-rule)).
 3. Copy the project URL from **Settings → API** and the `sb_publishable_…` key from
-   **Settings → API Keys** into `.env.local`. Both are safe in the browser; row level
-   security is what protects the data.
+   **Settings → API Keys** into `.env.development.local`. Both are safe in the browser;
+   row level security is what protects the data.
 4. In **Authentication → URL Configuration**, set the Site URL to
    `http://localhost:5173` and add `http://localhost:5173/**` to the redirect allow list,
    or magic links / OAuth will send you somewhere that isn't your dev server.

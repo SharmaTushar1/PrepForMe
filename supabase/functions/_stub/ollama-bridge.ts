@@ -105,7 +105,7 @@ async function extractPdfText(bytes: Uint8Array): Promise<string> {
     const dictStart = latin1.lastIndexOf("<<", match.index);
     const dict = dictStart >= 0 ? latin1.slice(dictStart, match.index) : "";
     if (!/\/FlateDecode/.test(dict)) continue;
-    const raw = new TextEncoder().encode(match[1]);
+    const raw = Uint8Array.from(match[1], (char) => char.charCodeAt(0));
     const inflated = await inflateZlib(raw);
     if (!inflated) continue;
     const decoded = new TextDecoder("latin1").decode(inflated);
